@@ -6,3 +6,7 @@ hermes-config/config.yaml
 # 本地临时
 *.tmp
 .DS_Store
+# cron 运行时状态(每机器不同,不同步)
+hermes-config/cron/executions.db
+hermes-config/cron/*.lock
+hermes-config/cron/ticker_heartbeat
