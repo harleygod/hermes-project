@@ -10,3 +10,4 @@ hermes-config/config.yaml
 hermes-config/cron/executions.db
 hermes-config/cron/*.lock
 hermes-config/cron/ticker_heartbeat
+hermes-config/cron/jobs.json
