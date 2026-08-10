@@ -1,0 +1,8 @@
+# 排除缓存/备份/敏感文件
+hermes-config/skills/.curator_backups/
+hermes-config/skills/.hub/
+hermes-config/.env
+hermes-config/config.yaml
+# 本地临时
+*.tmp
+.DS_Store

@@ -1,0 +1,46 @@
+# Hermes 主配置模板 —— 复制为 config.yaml 并填入密钥
+model:
+  reasoning_effort: high
+  default: deepseek-flash
+  provider: deepseek
+browser:
+  cloud_provider: local
+  use_gateway: false
+auxiliary:
+  vision:
+    provider: kimi-cn
+    model: kimi-k2.6
+    api_key: sk-xxxxxxxxxxxxxxxx   # 填入你的 KIMI key
+approvals:
+  destructive_slash_confirm: false
+onboarding:
+  seen:
+    openclaw_residue_cleanup: true
+    busy_input_prompt: true
+    tool_progress_prompt: true
+_config_version: 33
+vision:
+  provider: kimi-cn
+  model: kimi-k2.6
+  api_key: sk-xxxxxxxxxxxxxxxx   # 填入你的 KIMI key
+platform_toolsets:
+  cli:
+    - browser
+    - clarify
+    - code_execution
+    - computer_use
+    - cronjob
+    - delegation
+    - file
+    - image_gen
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - tts
+    - vision
+    - web
+known_plugin_toolsets:
+  cli:
+    - spotify

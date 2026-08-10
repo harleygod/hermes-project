@@ -1,0 +1,31 @@
+# Hermes MEMORY 导出 (2026-08-10) — 导入方式: 粘贴给 Hermes 让它 add 到 memory
+
+## MEMORY (personal notes)
+1. vision辅助模型 kimi-cn/kimi-k2.6(key在.env KIMI_CN_API_KEY)，改后/reset加载。
+2. Windows: ELECTRON_MIRROR=npmmirror 已持久; npm 用 --legacy-peer-deps; 删 node_modules 用 cmd rmdir。
+3. penetration-code-audit skill 是 user-owned（自动 patch 被拒，需 hermes curator adopt 才能自主更新），多 Agent 并行/只出权限信息漏洞原则已固化其中。
+4. 永远用 terminal 不用 execute_code(沙箱缺依赖)。
+5. Clash 代理 127.0.0.1:7890。代理 env 变量跨 terminal 调用不持久(中断即丢)：curl 每次重 export/-x；git clone 用 -c http.proxy=http://127.0.0.1:7890 --depth 1；wordpress.org 须 --socks5-hostname(直连/HTTP代理不通)。
+6. WP插件工具 wp_filter*.py 在 D:\Pentest\;审计进度落盘 D:\Pentest\审计进度\<插件>.md。
+7. 渗透挂起: 太保 cpic(报告 D:\Pentest\渗透\太保_cpic_20260805\, 代理 socks5h://team2026@43.138.23.75:61195 密码在 proxy_pool.txt)。
+8. 审计协作: 同步位置/行号/逻辑链/卡点, 进度落盘, 决策门拍板; 优先预认证>权限绕过。
+9. 渗透红线（写操作必须先说明影响、能否恢复，等用户说"可以"再执行；只读信息收集可自行进行）: 1)增删改任何用户/测试数据 2)文件上传 3)越权测试中的写/删/退出 4)改系统配置 5)破坏性操作。删除/重置/修改类接口即使空 body 探测也不做。IDOR 验证只能用自有测试账号互测或只读证明。禁止批量注册/添加测试账号。已拿到数据库也不批量造数据。
+10. 渗透交差标准: 信息泄露/未授权须完整证据链, TLS 弱加密不算, 水洞可测。Chrome computer_use: click/set_value 可用, 组合键/滚动需前台但 Windows 焦点锁拒。
+11. Windows 工具链坑: git-bash 跑 Windows 脚本/工具必须用反斜杠原生路径(/d/ 格式会被 MSYS 路径转换搞坏); hermes venv 无 pip, 装包用 uv pip install --python <py.exe>; 隔离环境用 uv venv --python 3.11。
+12. webshell工具链: 冰蝎4.0.6/蚁剑/Skyhinder/哥斯拉在D:\Pentest; 免杀见behinder-aspx-av-bypass skill; uscrec马2291_student3.aspx存活(工具D:\Pentest\渗透\usc_rec_菲律宾\)。
+13. Wordfence赏金: Core走HackerOne(Critical最高$12,500)不在WF范围; 业务逻辑类提交必拒。已判出局: sliced P2/ERE邮件/hitpay取消订单/restrict-user-access XML-RPC/smart-auto-upload SSRF。主力打法=补丁分析(changelog安全词筛选→diff修复找漏修,候选池见wordpress-plugin-bug-bounty skill)。
+14. Hermes 微信已接入(iLink Bot): .env 有 WEIXIN_ACCOUNT_ID/TOKEN/ALLOWED_USERS; QR 扫码流程见 hermes-messaging-platforms skill。坑: 加 KIMI_CN_API_KEY 后 gateway 主 provider 自动变 kimi-coding-cn 致 deepseek-flash 404, 需 config set model.provider deepseek。
+15. POC 验证须真实环境端到端，mock-only 不算成功(用户质疑过)。
+16. 规则/范围类信息必须核实官方页面(用户给链接时必须处理): curl 被 Cloudflare 拦截时, 必须向用户申请 computer_use 浏览器看或请用户截图, 绝不用知识库旧数据代替。联网信息与知识库冲突时以实时信息为准。
+
+## USER PROFILE
+1. 用户使用中文沟通，偏好直接简洁的回答风格。
+2. 位于中国，使用国内 npm 镜像源。GitHub 直连不稳定。对数据安全和隐私敏感，关注 LLM 工具是否偷偷读取本地文件。
+3. 想基于 requesting-code-review skill 改造更全面的代码安全审计 skill。
+4. 搜索偏好: 查资料/漏洞情报优先用浏览器搜索或联网搜索 API，不要用 curl 大规模 grep 本地目录。
+5. 渗透测试工作偏好: 逐个网站测试不批量扫; 优先用本机现有工具不重复下载安装; 交付要能交差、有证据(URL+响应包/截图可复现); 写操作接口测试用户自己动手; 报告按甲方/公司拆分独立文件。
+6. 用户明确纠正过: "不要默认我是老手, 我们是一起的"——讲解审计判断/漏洞逻辑要讲清楚"为什么", 不默认他懂专业术语, 平等协作语气。
+
+## 本会话新增(2026-08-10, 同步进 skill 的不用重复记)
+- 补丁分析流水线/全局状态文件/三层评估/工具+多Agent架构 → 已在 wordpress-plugin-bug-bounty skill 固化, 拷 skill 即带过去
+- FEA 教学已完成: nonce 通用机制(身份证明非资格证明) + 删除链 4 环节
