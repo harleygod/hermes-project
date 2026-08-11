@@ -47,6 +47,7 @@ metadata:
 - **关键词搜索 + 本地过滤**（最实用）：`action=query_plugins&request[search]=<关键词>` 拉 80-100 个，本地过滤 `active_installs` 25-5000；关键词用 High Threat 面大的词（file manager/upload/backup/attachment/download/reset/option/role/zip）→ `scripts/find_plugins.py`（可加关键词参数）；**新范围专用筛选器 `scripts/wp_filter_highthreat.py`**（25-5000 装 + 文件操作关键词 + 120+ 天未更新，2026-08 实战验证出 66 个候选）
 - 筛选信号：文件操作类**老插件**优先（RCE 高发）；**更新时间 150-500 天**（维护差 = 出洞率高，新范围下不追活跃更新的）；避开被审烂的超热门（elementor/woocommerce/CF7/yoast）
 - **下载类插件防护模式（kp-zip-downloader/lana-downloads-manager，2026-08 连审 2 个结论）**：文件路径来自**管理员配置的 post meta / option**（lana_download_file_url），攻击者只能控制 ID/slug（枚举已发布下载项 = 正常功能）→ 无洞。**判定法：追文件路径/URL 的源头——来自管理员配置 = 安全；来自用户输入（$_GET['file'] 等）+ 无 realpath 校验 = 任意文件读取硬洞**
+- **固定路径生成文件半洞评估法（export-media-as-zip 2026-08-11 案例）**：插件把生成文件写到 web 可访问目录+固定文件名（uploads/media-images.zip）→ 存在窗口内未认证可下载（管理员导出后 5 分钟内）。**评估三要点**：① 触发条件（谁触发生成——manage_options 管理员触发=攻击者不可控 → 大幅降级；攻击者可自己触发 = 硬）② 内容敏感性（媒体库图片本来就公开 vs 私有附件/含 PII 文档）③ 窗口（5 分钟过期 + cron 清理）。三要素都弱 = 不交；私有附件场景 + 攻击者可触发 = 可交候选
 - **High Threat 方向七插件防护规律总结（2026-08）**：上传类用 media_handle_upload / wp_handle_upload 标准函数 = WP 内置 MIME 白名单（订阅者无 unfiltered_upload，php 传不了）；管理类 = manage_options + nonce + 白名单；下载类 = 路径来自管理员 meta。**真正要找的 = 自写文件逻辑**：move_uploaded_file / rename( / file_put_contents（非 wp 函数）/ readfile( + $_GET、上传检查顺序错误、MIME 误判、临时文件/缓存文件暴露——用 WP 标准函数 = 大概率没洞，手工处理 = 重点
 
 ### 下载后粗扫评估（6 步判定值不值得深挖，30 分钟内出结论）
@@ -91,11 +92,13 @@ metadata:
 - 直接读 readme.txt：下载 zip 或 SVN `https://plugins.svn.wordpress.org/{slug}/trunk/readme.txt` 的 `== Changelog ==` 段
 - 对比版本间差异：SVN tags 目录 `https://plugins.svn.wordpress.org/{slug}/tags/` 列出历史版本，diff 相邻版本看安全修复
 - 从 changelog 判断攻击面：出现"security fix / XSS / authorization / nonce"条目 = 新版本有补丁 → 对比补丁找绕过（1day 变体）；近期版本改动频繁 = 攻击面大
+- **★ changelog 语义盲区（2026-08-11 bdvs-password-reset 案例）**：安全修复不一定写 security/XSS 词——bdvs 0.0.16/0.0.17 修"重置码生成不安全"(4位弱随机→8位安全随机+random_int)+"admin 角色默认不可重置"+码长 4→8，changelog 写的是 cryptographic/administrator/length，**无任何 security 词** → "changelog 无 security 词" ≠ "没修过"。判定法：读 changelog 同时留意 random/cryptographic/length/role/administrator/code/validation 等语义词；筛选器产出（"维护差/干净"）投入前抽查 changelog 全文。实战：wp_filter_highthreat 筛出 57 个"维护差"候选，连审 5 个（wordpress-reset=2025重写版、bdvs=2025安全修复）全防护完整——**刚重写/刚做安全修复的插件 = 防护好的概率极高，优先挑"多年未动的老代码"**
 - **"修过洞"要区分维护勤度（2026-08 两案例修正）**：
   - 修复历史 + **更新频率高（周更/月更）** = 作者响应快、防护到位 → 绕过难，别抱期望（advanced-form-integration 2.7.0 修过未认证提权但后端全 manage_options+nonce；survey-maker 5.2.3.5 修过 Stored XSS 但 nopriv 端点全查无洞，存储全 sanitize）
   - 修复历史 + **更新不勤（半年以上才动）** = 绕过空间大，优先目标
   - 1 年以上没更新但还有 1k+ 安装的老插件 = 代码旧没人管，最优目标
 - **筛选工具（2026-08）**：`scripts/wp_filter_vuln.py` = "修过安全洞 + 更新间隔 60-400 天"双条件筛选器（理想目标画像：修复历史 + 不勤快），跑一次出 40+ 候选；`scripts/find_plugins.py` 只按安装量过滤。用法 `python wp_filter_vuln.py [关键词...]`（默认攻击面关键词：upload/import/booking/form/directory/listing/subscription/invoice/membership）。**实战验证有效**：筛出的 sliced-invoices（5000 装/238 天没更新/修过 SQLi+CSV 注入）→ 挖出未认证读发票 + 未认证接受报价两洞
+- **维护差筛选器（2026-08-11 优化）**：`scripts/wp_filter_highthreat_v2.py`（25-5000装 + 文件操作关键词 + 120+天未更新；15s 超时/实时进度/Windows 路径，跑一次约 3 分钟出 50+ 候选）。**注意 changelog 语义盲区**：筛出的"维护差"候选里混着"刚重写/刚做安全修复"的插件（wordpress-reset 1.5.0 重写、bdvs 安全修复都没写 security 词）——投入前抽查 changelog 全文，优先挑多年未动的老代码
 - **换标准重筛（2026-08-09 实战）**：当"NVD 干净 + 正常更新"的池子连审 5 个全防护不错时，把间隔放宽到 **150-500 天** + 轮换关键词（booking/membership/subscription/invoice/payment/auction/loan/job），组合出 15 个理想目标 → 命中 restrict-user-access（10000 装/307 天没更新/权限控制类）→ 出 XML-RPC 内容保护绕过。**权限控制/内容保护/会员类插件 = 权限绕过洞高发区**，契合用户"预认证+权限绕过"偏好，优先于普通 CRUD 插件
 
 ### 查重（选目标后、投入审计前必做——2026-08 sliced-invoices 白干教训）
@@ -126,6 +129,7 @@ metadata:
 - **关键字搜索的局限**：grep 危险函数（file_put_contents/unserialize/$wpdb->query）只能找到"用了危险函数"，找不到设计/逻辑层缺陷：IDOR（权限判定对象≠操作对象）、检查时机（权限检查在哪个分支被跳过）、nonce 语义（只证明登录不证明授权）、默认配置值。**人类的审计 = 一行一行读调用链**，读得越多一眼扫过去就知道洞在哪。**grep 只用于定位（函数定义/钩子注册），分析必须 read_file 读完整函数上下文**
 - **六阶段流程**：① 功能地图（目录+钩子注册表→功能线）→ ② 入口点枚举（所有 add_action/add_filter/REST/admin_post/nopriv，按可达性分级：未认证>订阅者>作者>管理员，产出 audit-map.md 入口点清单）→ ③ 调用链阅读（对高价值入口 read_file 连续读完整处理函数，关注 输入→检查→处理→输出 全数据流）→ ④ 危险终点倒推（文件写/选项写/删除/SQL/输出，每个终点问：谁能到达？中间检查是什么？检查的对象对吗？）→ ⑤ 开发者意图对抗 7 问 → ⑥ 运行时验证+证据落盘
 - **开发者意图对抗 7 问**（抓设计/逻辑漏洞）：① 功能设计上给谁用？权限门在哪？② 权限判定依据的对象 = 实际操作的对象吗？（IDOR 检测器）③ nonce 绑定 action 名还是对象 ID？④ 默认配置是什么？配置改变信任边界吗？⑤ 多个入口到达同一操作吗？（补丁只改主路径、兄弟分支漏改）⑥ 状态变化有验证吗？⑦ 谁的数据会流到这里？（跨权限数据流）
+- **逻辑反向检查模式（2026-08-11 bdvs-password-reset 案例）**：读到"时间/条件判断反向"的代码 = 可疑——`if ($now > $code_expiry) $expired = false`（当前时间超过过期时间反而标记"未过期"）→ 过期码永久有效。判定法：布尔逻辑代入具体值推演（now=过期后1秒，expired 应为 true 还是 false，与代码结果对照）；反向检查单点通常不构成可利用洞（需正确 code 配合），但记录待用并检查兄弟分支是否同款
 - **人机分工**：用户手动读代码用直觉发现可疑点；我方负责系统性覆盖（枚举全部入口、追调用链验证、查同类兄弟点、查默认配置、证据落盘）。用户发现一处 → 我方把这一类全部扫一遍
 - **审计疲劳防护**：连续 5+ 插件防护好时，不敷衍粗扫——切换策略（换批目标/换攻击面/换插件类型），或停下来汇报让用户决策
 - **工具+多Agent 流水线（2026-08-10 用户要求，治"人工一行行读太累"）**：
@@ -178,7 +182,7 @@ metadata:
   - **python 长任务重定向到文件 = 块缓冲**：中间 print 不落盘、无法中途看进度 → `python -u` 或 print(flush=True)（wp_filter_highthreat.py v2 已内置实时进度）
   - **api.wordpress.org 走 HTTP 代理可通**：urllib 脚本跑前 `export HTTPS_PROXY=http://127.0.0.1:7890` 即可（不必 socks5h）；筛选器已升级 v2（15s 超时，跑一次约 3 分钟出 50+ 维护差候选）
 - **收尾三件事（每轮结束强制）**：更新 00_全局状态.md + 更新候选池文件（划掉已审）+ 插件进度落盘。三件做完才允许结束
-- **跨电脑同步（2026-08-10 用户启用 git 方案，多项目聚合仓库）**：仓库 = GitHub 私有 `https://github.com/harleygod/hermes-project.git`（多 Hermes 项目聚合，本项目在子目录 `wordpress-bug-bounty/`）。本地：`D:\Pentest\hermes-project\wordpress-bug-bounty\`（含 审计进度/ skill/ tools/ MEMORY导出.txt）。凭证：`~/.git-credentials`（harleygod + token，credential.helper store）；GitHub push 走代理（`git -c http.proxy=http://127.0.0.1:7890 push`）。**定时自动同步已挂 cron**（job 3626c3a11615，每小时跑 `~/AppData/Local/hermes/scripts/audit_sync.sh`：同步进度/skill → 有改动 commit → push，无改动静默）。**收工四件事 = 收尾三件事 + git 同步**（脚本自动做，手动 `bash /d/Pentest/audit_sync.sh`）。开工：`git pull` + 读 00_全局状态.md。**新项目加入**：`D:\Pentest\hermes-project\` 下建子目录，git add 推上去。**坑：GitHub fine-grained token（github_pat_ 开头）无"创建仓库"权限（Resource not accessible）——建仓需网页手动建私有空仓或换 classic token（勾 repo）；push 认证用 token 当密码；token 进过聊天记录后提醒用户轮换**
+- **跨电脑同步（2026-08-10 用户启用 git 方案，多项目聚合仓库）**：仓库 = GitHub 私有 `https://github.com/harleygod/hermes-project.git`（多 Hermes 项目聚合，本项目在子目录 `wordpress-bug-bounty/`）。本地：`D:\Pentest\hermes-project\wordpress-bug-bounty\`（含 审计进度/ skill/ tools/ MEMORY导出.txt）。凭证：`~/.git-credentials`（harleygod + token，credential.helper store）；GitHub push 走代理（`git -c http.proxy=http://127.0.0.1:7890 push`）。**定时自动同步已挂 cron**（job 3626c3a11615，每小时跑 `~/AppData/Local/hermes/scripts/audit_sync.sh`：同步进度/skill → 有改动 commit → push，无改动静默）。**收工四件事 = 收尾三件事 + git 同步**（脚本自动做，手动 `bash /d/Pentest/audit_sync.sh`）。开工：`git pull` + 读 00_全局状态.md。**新项目加入**：`D:\Pentest\hermes-project\` 下建子目录，git add 推上去。**仓库根还有 `hermes-config/`（2026-08-11 用户要求同步 Hermes 环境给下班电脑）**：skills 全量 + SOUL.md + cron/ + scripts/ + **脱敏模板 .env.example/config.yaml.example（真实 .env/config.yaml 永不入库，密钥用户自己填）**；下班电脑装好 Hermes 后按 `hermes-config/README.md` 恢复（skill 拷到 skills 目录 + 模板填密钥 + MEMORY 导入）。cron/jobs.json 含运行时时间戳已 gitignore（否则每次 tick 产生 diff）**坑：GitHub fine-grained token（github_pat_ 开头）无"创建仓库"权限（Resource not accessible）——建仓需网页手动建私有空仓或换 classic token（勾 repo）；push 认证用 token 当密码；token 进过聊天记录后提醒用户轮换**
 
 **先讲功能再讲代码（2026-08-10 用户明确纠正）**：开工先给用户讲清楚"插件是干嘛的"——功能流程（上传/下载/管理/配置四条线）、开发者的设计思路、信任边界（哪些输入用户可控、权限模型怎么设计）。**"跟开发做对抗"= 先理解开发者设计的功能和思路，再针对性地分析背后可能存在的漏洞**。用户需要知道源码绝对路径（下载后放在哪个目录），不是相对路径。讲判断要带"为什么"（为什么这层设计挡住了攻击）。
 
@@ -208,6 +212,14 @@ metadata:
 - **实战（2026-08-10，第 5-6 连审：pdf-viewer-block / media-library-helper）**：
   - **★ OR 逻辑 nonce 模式（可复用判定法）**：`if (!current_user_can('X') && !wp_verify_nonce(...))` 的 OR 逻辑 = **X 权限用户免 nonce** → 该权限用户的 CSRF 面存在。media-library-helper 1.3.0 \"CSRF 修复\"把硬 nonce（`!wp_verify_nonce`）改成 OR（作者为修 admin 功能 bug 牺牲 nonce）= **修复引入削弱**（同 wp-attachments noheader 模式）；后果 = admin CSRF 改附件元数据（title/alt/caption，低危不交）。对比同插件 attachment_save_bulk_edit：nonce 保持硬检查 + per-id current_user_can('edit_post') = 完整。**判定：见 OR 逻辑 nonce → 查免检权限用户的 CSRF 后果——元数据篡改/解除关联=低危不交；选项写/文件操作/权限变更=硬洞**
   - **wp_entry_map.py 实测（6 连审全程用）**：`python "D:/Pentest/wp_entry_map.py" <插件目录>` 出口点分类/危险函数/权限函数/未过滤输入四类清单（**MSYS 坑：Windows 原生 python 吃 /d/ 路径会解析成 D:\d\，必须用 D:/ 或 D:\ 原生路径**），比肉眼 grep 快且不漏入口；脚本已随 skill 内置 `scripts/wp_entry_map.py`
+  - **★ wp_entry_map REST 盲区（2026-08-11 bdvs-password-reset 案例）**：工具只抓 add_action/add_filter，**register_rest_route 端点完全不显示**——bdvs 三个 REST 路由（reset-password/validate-code/set-password）地图里入口点全空、权限函数显示 0 个（实际每个都有 permission_callback）。**判定法：地图跑完必须手动补 `grep -rn "register_rest_route"`，逐个看路由的 permission_callback——`__return_true`/`return true` = 未认证开放，`is_user_logged_in`/`current_user_can` = 登录/权限门。REST 类插件的核心面全在路由文件（api.route.*.php 模式），地图工具+手动 grep 双覆盖**
+- **实战（2026-08-11，第 7-11 连审：wordpress-reset / wp-migration-duplicator / csv-import-and-exporter / bdvs-password-reset / export-media-as-zip，全放弃）**：
+  - **重置/重置码类插件审计顺序**（wordpress-reset + bdvs）：先数防护链层数——wordpress-reset 1.5.0 五层（hidden=true + 人工确认词 + nonce + activate_plugins + SQL 全参数化 %i）；bdvs 密码重置四层（8位随机码 + 3次尝试限制共享计数器 + 角色白名单 + email 指定目标）。**重置类插件的核心问题永远是：谁能触发 + 码/令牌空间 + 尝试限制 + 目标选择**——四者齐 = 安全；任一缺失 = 认证绕过/提权/任意重置硬洞。bdvs 的尝试计数器 validate-code 与 set-password 共享（同 user meta）= 无独立绕过
+  - **密码重置类"修复到位"特征**：码长度+字符集+随机源（random_int）+管理员排除+尝试限制，五件全 = 修复完整难挖（bdvs 0.0.16/0.0.17 案例）；只改一件 = 大概率漏修（继续挖其余）
+  - **查重拦截案例**：wp-migration-duplicator（WebToffee 系列）已有 CVE-2023-45636（Missing Auth）+ CVE-2025-24651（敏感信息写日志）→ 直接排除，别浪费时间——**"没修过洞"筛选器筛出的目标也要过查重，WebToffee/常见厂商系列优先怀疑已披露**
+  - **nopriv 注册 ≠ 可利用（csv-import-and-exporter 案例）**：`wp_ajax_nopriv_download` 注册了但 handler 整个逻辑包在 `if (isset(type) && is_user_logged_in() && wp_verify_nonce && (admin||editor))` 内，else 只加错误 → 未认证进不来。**判定法：读到 nopriv 先兴奋前，读完整 if 条件——登录/权限检查挡在前面 = 只是代码异味，实际不可利用**；同理菜单 capability 用老式 level_N（level_7=editor+）也要映射确认是否超范围
+  - **固定路径 ZIP 半洞**（见上文评估法）；**连续 15 个插件 0 可交 → 换面**：High Threat 小插件池子已被筛透（防护好/被挖过/入口超范围），SQLi/Stored XSS 面（500装门槛，10k-50k 大插件）未系统性打过且是 semgrep 强项 → 战略转向 SQLi/XSS 面
+  - **SQLi/XSS 面工具（2026-08-11 新增，未实测待验证）**：`scripts/wp_filter_sqlxss.py` = 10k-50k 装大插件筛选器（18 个表单/搜索/动态输出类关键词：contact form/search/table/directory/listing/booking/membership/donation/quiz/survey/event/gallery/ajax/import/export/shortcode/subscription/order，按装量降序输出）；`scripts/wp_rules_sqli_xss.yaml` = semgrep 自定义规则（三条：wp-sqli-string-interp = $wpdb 调用字符串插值无 prepare、wp-sqli-concat = query/sql/where 变量拼接、wp-xss-echo-input = echo/print 直接输出 $_GET/$_POST/$_REQUEST），跑法：`semgrep.exe scan --config "D:/Pentest/wp_rules_sqli_xss.yaml" <插件目录>`，**跑前先 `semgrep --validate --config <规则文件>` 验证规则语法**。目标画像：表单/搜索/查询类插件（SQL 拼接面大）+ 短代码/前端输出类（XSS 面大），装量 10k+（SQLi/XSS 500 门槛全在范围，不要求老维护）
 
 ## 靶场复现（Windows/phpStudy）
 - 详细步骤/坑/表单构造：references/wp-lab-setup.md

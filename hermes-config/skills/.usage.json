@@ -926,14 +926,14 @@
     "archived_at": null,
     "created_at": "2026-08-11T01:14:57.498915+00:00",
     "created_by": "agent",
-    "last_patched_at": null,
-    "last_used_at": null,
-    "last_viewed_at": null,
-    "patch_count": 0,
+    "last_patched_at": "2026-08-11T03:16:16.636823+00:00",
+    "last_used_at": "2026-08-11T03:16:09.339570+00:00",
+    "last_viewed_at": "2026-08-11T03:16:09.322483+00:00",
+    "patch_count": 1,
     "pinned": false,
     "state": "active",
-    "use_count": 0,
-    "view_count": 0
+    "use_count": 2,
+    "view_count": 2
   },
   "simplify-code": {
     "archived_at": null,
@@ -1134,14 +1134,14 @@
     "archived_at": null,
     "created_at": "2026-08-11T01:15:11.131697+00:00",
     "created_by": "agent",
-    "last_patched_at": null,
-    "last_used_at": null,
-    "last_viewed_at": null,
-    "patch_count": 0,
+    "last_patched_at": "2026-08-11T03:16:28.868183+00:00",
+    "last_used_at": "2026-08-11T03:16:21.942233+00:00",
+    "last_viewed_at": "2026-08-11T03:16:21.932540+00:00",
+    "patch_count": 1,
     "pinned": false,
     "state": "active",
-    "use_count": 0,
-    "view_count": 0
+    "use_count": 2,
+    "view_count": 2
   },
   "webshell-ops": {
     "archived_at": null,
@@ -1251,14 +1251,14 @@
     "archived_at": null,
     "created_at": "2026-08-07T08:31:00.718893+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-11T01:39:53.145027+00:00",
-    "last_used_at": "2026-08-11T01:39:45.391940+00:00",
-    "last_viewed_at": "2026-08-11T01:39:45.383348+00:00",
-    "patch_count": 75,
+    "last_patched_at": "2026-08-11T03:29:29.902862+00:00",
+    "last_used_at": "2026-08-11T03:28:15.888746+00:00",
+    "last_viewed_at": "2026-08-11T03:28:15.857016+00:00",
+    "patch_count": 86,
     "pinned": false,
     "state": "active",
-    "use_count": 51,
-    "view_count": 51
+    "use_count": 53,
+    "view_count": 53
   },
   "wordpress-plugin-code-audit": {
     "archived_at": null,

@@ -1,0 +1,53 @@
+# WP 场景 semgrep 自定义规则: SQL 拼接 + 未转义输出 (2026-08-11)
+# 用法: semgrep scan --config "D:/Pentest/wp_rules_sqli_xss.yaml" <插件目录>
+# 注意: 跑前先验证规则语法: semgrep --validate --config <本文件>
+# 定位: 机械层候选 (SQLi/XSS), 逻辑层可达性/权限仍需人工验证 (7问)
+rules:
+  - id: wp-sqli-string-interp
+    languages: [php]
+    message: 'WP SQL string interp: $wpdb call with $VAR concat, no prepare'
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: $wpdb->query("...$VAR...")
+          - pattern: $wpdb->get_results("...$VAR...")
+          - pattern: $wpdb->get_var("...$VAR...")
+          - pattern: $wpdb->get_row("...$VAR...")
+          - pattern: $wpdb->get_col("...$VAR...")
+          - pattern: $wpdb->get_results(... . $VAR . ...)
+          - pattern: $wpdb->query(... . $VAR . ...)
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (GET|POST|REQUEST|COOKIE|SERVER)|request|input|param|search|term|query
+      - pattern-not: $wpdb->prepare(...)
+
+  - id: wp-sqli-concat
+    languages: [php]
+    message: 'Suspicious SQL concat in query/where/sql var'
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: "$query = ... $VAR ...;"
+          - pattern: "$sql = ... $VAR ...;"
+          - pattern: "$where = ... $VAR ...;"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (GET|POST|REQUEST)|sanitize_text_field|sanitize_key|intval|esc_sql
+      - pattern-not-inside: $wpdb->prepare(...)
+
+  - id: wp-xss-echo-input
+    languages: [php]
+    message: 'Unescaped echo/print of user input'
+    severity: WARNING
+    patterns:
+      - pattern-either:
+          - pattern: echo $_GET[...]
+          - pattern: echo $_POST[...]
+          - pattern: echo $_REQUEST[...]
+          - pattern: print $_GET[...]
+          - pattern: print $_POST[...]
+          - pattern: print $_REQUEST[...]
+          - pattern: "<?php echo $VAR; ?>"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (GET|POST|REQUEST|COOKIE)
