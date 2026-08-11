@@ -174,6 +174,9 @@ metadata:
   - 版本号 zip 404 = 该版本无 tag（trunk 版）→ 下 `{slug}.zip` 最新版或查 SVN tags 列表
   - 命令链避免 `A && B && C`（中间失败会留下错误状态），分步执行
   - 代理不稳时（SSL exit 35）重试/后台下载 + notify_on_complete
+  - **python 脚本内文件路径也要 Windows 格式**（`D:/...`）：`/d/...` 在 bash 里能跑但 Windows 原生 python 报 FileNotFoundError（2026-08-11 筛选器 v2 踩坑）；脚本默认输出路径同理
+  - **python 长任务重定向到文件 = 块缓冲**：中间 print 不落盘、无法中途看进度 → `python -u` 或 print(flush=True)（wp_filter_highthreat.py v2 已内置实时进度）
+  - **api.wordpress.org 走 HTTP 代理可通**：urllib 脚本跑前 `export HTTPS_PROXY=http://127.0.0.1:7890` 即可（不必 socks5h）；筛选器已升级 v2（15s 超时，跑一次约 3 分钟出 50+ 维护差候选）
 - **收尾三件事（每轮结束强制）**：更新 00_全局状态.md + 更新候选池文件（划掉已审）+ 插件进度落盘。三件做完才允许结束
 - **跨电脑同步（2026-08-10 用户启用 git 方案，多项目聚合仓库）**：仓库 = GitHub 私有 `https://github.com/harleygod/hermes-project.git`（多 Hermes 项目聚合，本项目在子目录 `wordpress-bug-bounty/`）。本地：`D:\Pentest\hermes-project\wordpress-bug-bounty\`（含 审计进度/ skill/ tools/ MEMORY导出.txt）。凭证：`~/.git-credentials`（harleygod + token，credential.helper store）；GitHub push 走代理（`git -c http.proxy=http://127.0.0.1:7890 push`）。**定时自动同步已挂 cron**（job 3626c3a11615，每小时跑 `~/AppData/Local/hermes/scripts/audit_sync.sh`：同步进度/skill → 有改动 commit → push，无改动静默）。**收工四件事 = 收尾三件事 + git 同步**（脚本自动做，手动 `bash /d/Pentest/audit_sync.sh`）。开工：`git pull` + 读 00_全局状态.md。**新项目加入**：`D:\Pentest\hermes-project\` 下建子目录，git add 推上去。**坑：GitHub fine-grained token（github_pat_ 开头）无"创建仓库"权限（Resource not accessible）——建仓需网页手动建私有空仓或换 classic token（勾 repo）；push 认证用 token 当密码；token 进过聊天记录后提醒用户轮换**
 

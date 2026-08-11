@@ -73,6 +73,22 @@
 - backup-bolt(800装, 309天, "improved security" 泛词) ← 已粗扫, 见 D:\Pentest\审计进度\backup-bolt+bp-msgat.md
 - attachments(8000装, 223天, escape/nonce 修复)
 
+## 2026-08-11 新池：维护差高危面筛选（wp_filter_highthreat.py v2）
+
+**背景**：10 连审"修过洞"候选全防护完整/超范围 → 换"没被挖过"的池子。跑 `scripts/wp_filter_highthreat.py`（v2：15s 超时+实时进度；跑前 `export HTTPS_PROXY=http://127.0.0.1:7890`）→ 461 候选 → 181 个 25-5000 装 → **57 个 120+ 天未更新**（结果落盘 D:\Pentest\筛选结果_20260811.txt）。
+
+**重点目标（High Threat 潜力排序，未审）**：
+- wordpress-reset (5000装, 298天) —— 站点重置插件，数据库/设置重置=高危操作面
+- wp-migration-duplicator (5000装, 133天) —— 站点迁移复制=打包解包=文件操作 RCE 高发
+- bdvs-password-reset (900装, 432天) —— 密码重置=认证绕过/账户接管
+- csv-import-and-exporter (1000装, 411天) —— CSV 导入=文件上传/注入
+- db-reset-pro (300装, 348天) —— 数据库重置
+- tutor-lms-migration-tool (1000装, 273天) —— 迁移工具
+- export-media-as-zip (2000装, 125天) —— 媒体打包 zip=任意文件读取面
+- 其余 50 个见筛选结果文件（已排除 11 个已审：download-theme/image-upload-for-bbpress/canonical-attachments/backup-bolt/kp-zip-downloader/lana-downloads/well-known-file/dk-pdf/pdf-forms/buddypress-message/fields-and-file）
+
+**筛选器 v2 经验**：原版 40s 超时在慢代理下极慢（fetch 阶段就卡死）→ v2 改 15s + 实时 flush + 分阶段进度；输出路径必须 Windows 格式（`D:/...`，`/d/...` 在 Windows python 报 FileNotFoundError）；urllib 走 HTTP 代理 `export HTTPS_PROXY` 即可。
+
 ## 修复完整度判定清单(下载端点/白名单类)
 
 1. 路径回退:修复后的白名单检查是否覆盖所有下载路径(如 uploads 根目录兜底分支)

@@ -13,11 +13,13 @@ metadata:
 拿到 ASPX webshell（冰蝎式 `Assembly.Load(...).CreateInstance("U").Equals(this)` 马）后需要横向到内网（10.x）或其他主机：从 webshell 所在机器发起任意 TCP 连接，把本地工具（Navicat / mssqlclient / nmap -sT）接进目标内网。
 
 ## 架构
-- **载荷（服务器侧，内存加载零写入）**：U_Tunnel.dll，action = connect / send / read / close
+- **载荷（服务器侧，内存加载零写入）**：U_Tunnel.dll，action = connect / send / read / close / **readfile**
   - connect：建 TCP 连到 `t:ip p:port`，socket 存 `Application["sk_<id>"]`，返回 OK
   - send：写数据 + 阻塞读响应（最多 ~8s，带回程数据）
   - read：非阻塞读现有数据（`Available==0` 立即返回空）
   - close：关闭 socket + 从 Application 移除
+  - **readfile（本会话新增，批量下载首选）**：`f:路径` → `File.ReadAllBytes` 内存 base64 返回，**零磁盘写入**
+    —— 比 certutil 临时文件方案更干净（用户偏好：远程批量操作小批量 ≤5 个/批，不在目标 Uploads 目录堆积临时文件）
 - **客户端（本机 Python）三种模式**：
   - `forward <ip> <port> -l <本地端口>`：本地监听，每条连接转发到内网目标（**工具直接连 127.0.0.1，最省事**）
   - `socks`：SOCKS5 代理 127.0.0.1:1080（SOCKS 原生工具 / Proxifier 强制任意程序走）
@@ -29,7 +31,7 @@ metadata:
 1. **请求体是密文！** 载荷解析参数前必须先解密：`RijndaelManaged().CreateDecryptor(key,key)`，key = `Encoding.Default.GetBytes(Session[0].ToString())`（Session[0] = 壳存的密钥，见 pentest-webshell-ops §3）。不先解密直接找 0x7E×6 标记 → 找不到 → 一律 `ERR:NOACTION`
 2. **static 字段不跨请求持久！** Assembly.Load 每次请求都加载**新程序集实例** → static 每次重置 → socket 全丢。必须用 **Application 状态**（或 Session）存 socket
 3. **Session 锁竞争**：同 ASP.NET 会话的并发请求被串行化 → 一个 read 阻塞 6s 会卡死 send（表现：SOCKS 里 Nuxt 请求返回空）。解决：socket 存 Application（无会话锁）+ read 非阻塞
-4. **cmd `type` 二进制会被冰蝎 Cmd 载荷的 UTF-8 回环损坏**（payload 源码 `Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(text))`）→ 下文件用 `certutil -encode <文件> <自己可写目录>\x.b64 & type <b64> & del <b64>` 走 base64
+4. **cmd `type` 二进制会被冰蝎 Cmd 载荷的 UTF-8 回环损坏**（payload 源码 `Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(text))`）→ 下文件优先用 **readfile 动作**（内存 base64，零磁盘写入）；无 readfile 时用 `certutil -encode <文件> <自己可写目录>\x.b64 & type <b64> & del <b64>` 走 base64
 5. **SQL Server 强制 TLS**（impacket 显示 "Encryption required, switching to TLS"）→ 裸 TDS prelogin 测试必然失败/无响应，**不代表隧道坏**；真客户端（Navicat/impacket）的 TLS 握手会穿过透明隧道正常完成
 6. **连通性测试禁用 curl telnet/状态码**（用户铁规则，本会话误判 1433 公网不通）：SQL 等"建连后不发言"的服务让 curl 傻等 banner 到超时 = 假阴性。TCP 连通性一律 Python socket connect；任何 curl 空/超时/异常结果先声明"可能不准"再下结论
 

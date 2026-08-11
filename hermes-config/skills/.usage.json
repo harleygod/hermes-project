@@ -922,6 +922,19 @@
     "use_count": 0,
     "view_count": 0
   },
+  "shared-hosting-cross-tenant": {
+    "archived_at": null,
+    "created_at": "2026-08-11T01:14:57.498915+00:00",
+    "created_by": "agent",
+    "last_patched_at": null,
+    "last_used_at": null,
+    "last_viewed_at": null,
+    "patch_count": 0,
+    "pinned": false,
+    "state": "active",
+    "use_count": 0,
+    "view_count": 0
+  },
   "simplify-code": {
     "archived_at": null,
     "created_at": "2026-08-05T05:55:35.012773+00:00",
@@ -1117,6 +1130,19 @@
     "use_count": 0,
     "view_count": 0
   },
+  "webshell-http-tunnel": {
+    "archived_at": null,
+    "created_at": "2026-08-11T01:15:11.131697+00:00",
+    "created_by": "agent",
+    "last_patched_at": null,
+    "last_used_at": null,
+    "last_viewed_at": null,
+    "patch_count": 0,
+    "pinned": false,
+    "state": "active",
+    "use_count": 0,
+    "view_count": 0
+  },
   "webshell-ops": {
     "archived_at": null,
     "created_at": "2026-08-10T02:33:04.290958+00:00",
@@ -1134,14 +1160,14 @@
     "archived_at": null,
     "created_at": "2026-08-10T08:47:09.708301+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-10T09:05:21.477615+00:00",
-    "last_used_at": "2026-08-10T10:30:18.902023+00:00",
-    "last_viewed_at": "2026-08-10T10:30:18.892104+00:00",
-    "patch_count": 3,
+    "last_patched_at": "2026-08-11T02:01:00.721414+00:00",
+    "last_used_at": "2026-08-11T02:00:35.370456+00:00",
+    "last_viewed_at": "2026-08-11T02:00:35.362950+00:00",
+    "patch_count": 7,
     "pinned": false,
     "state": "active",
-    "use_count": 4,
-    "view_count": 4
+    "use_count": 6,
+    "view_count": 6
   },
   "webshell-troubleshooting": {
     "archived_at": null,
@@ -1173,14 +1199,14 @@
     "archived_at": null,
     "created_at": "2026-08-03T02:55:23.950348+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-10T10:30:47.651726+00:00",
-    "last_used_at": "2026-08-10T10:30:42.795571+00:00",
-    "last_viewed_at": "2026-08-10T10:30:42.772125+00:00",
-    "patch_count": 18,
+    "last_patched_at": "2026-08-11T02:00:14.952825+00:00",
+    "last_used_at": "2026-08-11T01:59:56.047561+00:00",
+    "last_viewed_at": "2026-08-11T01:59:56.029911+00:00",
+    "patch_count": 19,
     "pinned": false,
     "state": "active",
-    "use_count": 11,
-    "view_count": 11
+    "use_count": 12,
+    "view_count": 12
   },
   "wordfence-bug-bounty": {
     "archived_at": null,
@@ -1225,14 +1251,14 @@
     "archived_at": null,
     "created_at": "2026-08-07T08:31:00.718893+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-10T10:25:54.638603+00:00",
-    "last_used_at": "2026-08-10T10:21:58.238781+00:00",
-    "last_viewed_at": "2026-08-10T10:21:58.222712+00:00",
-    "patch_count": 72,
+    "last_patched_at": "2026-08-11T01:39:53.145027+00:00",
+    "last_used_at": "2026-08-11T01:39:45.391940+00:00",
+    "last_viewed_at": "2026-08-11T01:39:45.383348+00:00",
+    "patch_count": 75,
     "pinned": false,
     "state": "active",
-    "use_count": 48,
-    "view_count": 48
+    "use_count": 51,
+    "view_count": 51
   },
   "wordpress-plugin-code-audit": {
     "archived_at": null,
