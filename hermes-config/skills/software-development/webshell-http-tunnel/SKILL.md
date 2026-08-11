@@ -50,6 +50,25 @@ metadata:
 - **SOCKS 隧道内的 TCP 探测/抓 banner 用 PySocks**: `socks.socksocket()` + `set_proxy(SOCKS5, 127.0.0.1, 1080)` + connect + recv —
   例: SSH banner 直接暴露系统(OpenSSH_9.6p1 Ubuntu-3ubuntu13.18 = Ubuntu 24.04); 也是多端口快速探测的正路
   (curl 的 --socks5 + telnet:// 仍是老坑, 见上)。banner 空=服务不主动说话, 别当"没开"
+- **隧道内测 MySQL 用 pymysql + SOCKS monkeypatch**: `socks.set_default_proxy(SOCKS5, 127.0.0.1, 1080)` +
+  `socket.socket = socks.socksocket` 之后 pymysql 直连内网 3306 即可(注意区分 `root` 与匿名账号 `''` —
+  空用户名登录成功 ≠ root, 看 `SELECT CURRENT_USER()` 和 SHOW GRANTS 确认实际权限; SHOW DATABASES 只列有权限的库)
+
+## 服务器端进程/文件操作坑 (2026-08 实战)
+1. **`start /b` 起常驻进程会让 webshell 请求超时**: 载荷 execCMD 等 stdout EOF, `start /b` 把子进程 stdout
+   挂在管道上 → 请求 ReadTimeout, 但**进程其实已启动**(超时后再 netstat 能看到监听)。
+   要分离启动用 `wmic process call create "<exe> <args>"`(立即返回, 不占管道)。
+2. **受限应用池账号杀不掉自己起的进程**: taskkill/tasklist/wmic terminate 全报"用户名或密码错误"(假报错,
+   账号进程管理权限被限) → 杀不掉也删不掉(文件被锁) → 等 IIS 应用池回收(~29h)连带杀掉子进程后文件才能删。
+   清理不了就先接受: 进程在受害机自己租户内+无公网可达端口, 危害有限, 记档。
+3. **bash heredoc 里 `\\` 会被折叠成 `\`**(终端工具层): Python 源码 `"path\\t.txt"` 实际变成 `\t`=TAB →
+   cmd 路径损坏"filename syntax is incorrect"。**写脚本一律用 write_file**(内容原样保留) + 路径用原始字符串。
+4. **ASPX 编译缓存**: 覆盖已存在的 .aspx 后服务器可能仍执行旧编译版(重编译时机不定) →
+   **换新文件名**(如 hub2.aspx)保证拿到新编译; 另: `/xxx.aspx/任意/子/路径` 会照常执行该 aspx
+   (Request.PathInfo) — 不需要路由配置就能在任意子路径提供响应(搭假 Hub/假回调端点时极好用)。
+5. **SSRF 类 CVE 的假回调端点优先放受害机公网 IIS**: 新监听端口常被防火墙挡(公网+段间都可能),
+   而受害机已有的 80/IIS 全通 → 把响应体写成静态文件或 aspx 放自己租户 Web 目录, 让目标来 GET 即可,
+   彻底绕开"目标能不能连到我的新端口"这类连通性未知数。
 
 ## C2 场景判断
 - **目标机是战利品不是基地**: 别把 C2 服务端放受害机(低权限/端口被占/杀软/运营商监控=自毁访问)

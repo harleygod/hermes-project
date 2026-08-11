@@ -12,6 +12,8 @@
 | GitHub commits search | `https://api.github.com/search/commits?q=<kw>` + `Accept: application/vnd.github.cloak-preview+json` | 匿名可用；查 POC 提交 |
 | nuclei-templates 文件树 | `https://api.github.com/repos/projectdiscovery/nuclei-templates/git/trees/main?recursive=1` | 匿名可用；grep `"path"` 里的关键词（如 ecology），直接看出官方有哪些该产品漏洞模板 |
 | GitHub raw 文件 | `https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>` | 拉配置文件/源码查默认密钥等 |
+| CSDN 文章 | `curl -sL <article_url> -A "<浏览器UA>"` 后解析 `id="content_views"` div | 无需登录/无验证码（实测 2026-08，156KB 正常返回）；抓标题 + 正文直接看 POC/复现细节。用户给 CSDN 链接时先 curl，不必开浏览器 |
+| 用友/泛微等厂商公告 | curl 直连常被 Cloudflare 等拦 | 见 memory 红线：被拦时申请 computer_use 浏览器或请用户截图，绝不用知识库旧数据代替 |
 
 ## 不可用/受限（踩过）
 

@@ -44,6 +44,13 @@ description: 查漏洞是否公开/有无公开POC，未公开则分析并写探
 - **只读路由验证**: 空 body POST `{}`（带 Content-Type: application/json）→ 校验错误/空 200，不改状态；
   带真实参数 = 触发漏洞，必须先授权。CVE 链完整案例见 `references/smartermail-cve-chain-2026-08.md`
   （SmarterMail 100.0.7957: KEV 密码重置绕过 + ConnectToHub 未认证 RCE，路由实测 + 公开 PoC + 静音利用链设计）。
+- **1day 利用的"契约不符"止损信号（重要）**: 目标 build 在 CVE 影响区间内但利用不生效时, 先分类信号:
+  ① `200 空响应 × N 变体`（字段名大小写/query/form/多路由全试）= 路由存在但方法实现与 PoC 不符;
+  ② `400 UNKNOWN_ERROR × 全输入变体`（连空 guid/正常请求都 400）= handler 解析输入前就抛异常
+  （该 build 加了会话/校验或流程重构）。两者共同指向:**公开 PoC 基于旧 build（94xx/16.x 时代）编写,
+  新 build 契约已变**（即使版本号仍在"受影响"区间）→ **及时止损**: 报告级发现（版本+路由实测+KEV+公开 PoC 引用）
+  已够交差, 别无限变体硬碰; 拿真契约需反编译目标应用 DLL（常需先有 RCE = 鸡生蛋死锁）, 等匹配 build 的公开 PoC
+  或授权深化。完整执行实录见 `references/smartermail-cve-chain-2026-08.md`。
 
 ## 闭源组件考古
 新版组件源码闭源（GitHub 只有 example、Maven sources 空壳）时，用二进制 jar + javap 反编译确认接口路径/参数/危险调用链——完整命令集见 `references/closed-source-jar-forensics.md`（阿里云 Maven 镜像直连、字节码定位 AviatorEvaluator.execute、grep -rla 二进制定位类等实战技巧）。
