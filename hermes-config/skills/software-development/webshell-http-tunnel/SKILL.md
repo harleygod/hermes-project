@@ -47,6 +47,9 @@ metadata:
   且强制 TLS — curl telnet 傻等 banner 超时 = 假阴性。用 impacket mssqlclient 穿透测试最干净
   (登录失败回显 `ERROR(SQLxxxx)` = 隧道+SQL 全链路通)
 - 内网 ICMP 常全灭 → 别指望 ping sweep, 用 TCP 探测/观察 netstat ESTABLISHED 找真实存活点
+- **SOCKS 隧道内的 TCP 探测/抓 banner 用 PySocks**: `socks.socksocket()` + `set_proxy(SOCKS5, 127.0.0.1, 1080)` + connect + recv —
+  例: SSH banner 直接暴露系统(OpenSSH_9.6p1 Ubuntu-3ubuntu13.18 = Ubuntu 24.04); 也是多端口快速探测的正路
+  (curl 的 --socks5 + telnet:// 仍是老坑, 见上)。banner 空=服务不主动说话, 别当"没开"
 
 ## C2 场景判断
 - **目标机是战利品不是基地**: 别把 C2 服务端放受害机(低权限/端口被占/杀软/运营商监控=自毁访问)

@@ -32,6 +32,19 @@ description: 查漏洞是否公开/有无公开POC，未公开则分析并写探
 4. **未公开** → 标注 1day，分析原理（见下）+ 写探测型 POC
 5. **收录**到 `D:\Pentest\攻防\武器库\<漏洞名>\`（用户约定格式，见下）
 
+## 版本指纹与 CVE 适用性判断（老产品/中间件）
+- **精确 build 号从 JS bundle 文件名拿**: Angular/SPA 产品常把版本编进 bundle 名，如 SmarterMail 登录页
+  引用 `site-v-100.0.7957.24844.min.js` → build 7957 实锤。老版本文本界面（Login.aspx 时代）从页面
+  HTML 的 help 链接拿: `v=14.7.6347`。SPA 无版本泄露时试 `/api/v1/system/version` 类健康端点。
+- **CVE 版本区间语义逐条核**: "16.x through 100.x before 7803" → 14.x 不在范围（别误报）；"versions
+  prior to build 9511" → 下界模糊，老 build（如 14.7/6347）可能根本没有受影响的新 API 端点
+  （endpoint 是 16.x 才引入的）→ 必须实测路由存在性，不能只看版本号判受害。
+- **路由存在性对照实验**（防 API catch-all 误判）: 先探一个肯定不存在的路径（`/api/v1/nonexistent-xyz`）
+  看基线（404），再探目标路径 —— 基线 404 而目标 200 = 真实路由；全都 200 = catch-all，之前的 200 全是假阳性。
+- **只读路由验证**: 空 body POST `{}`（带 Content-Type: application/json）→ 校验错误/空 200，不改状态；
+  带真实参数 = 触发漏洞，必须先授权。CVE 链完整案例见 `references/smartermail-cve-chain-2026-08.md`
+  （SmarterMail 100.0.7957: KEV 密码重置绕过 + ConnectToHub 未认证 RCE，路由实测 + 公开 PoC + 静音利用链设计）。
+
 ## 闭源组件考古
 新版组件源码闭源（GitHub 只有 example、Maven sources 空壳）时，用二进制 jar + javap 反编译确认接口路径/参数/危险调用链——完整命令集见 `references/closed-source-jar-forensics.md`（阿里云 Maven 镜像直连、字节码定位 AviatorEvaluator.execute、grep -rla 二进制定位类等实战技巧）。
 

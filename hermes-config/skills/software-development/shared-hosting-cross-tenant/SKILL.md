@@ -49,6 +49,9 @@ IIS_IUSRS 有 (M,DC) → 覆盖邻居租户的编译缓存 DLL → 对方池回�
 - 租户 SQL = `sql5xxx.site4now.net`(每租户独立实例, 公网 IP 可直连 1433, **强制 TLS**)
 - 单租户实例隔离良好: 只看到自己的库, sa 禁用, xp_cmdshell/OLE/clr 全关 → 提权面小
 - 内网管理网 10.10.28.0/22(ICMP 全灭, TCP 可通); SQL 农场 10.10.30.x(sql5063 等, netstat ESTABLISHED 暴露)
+- 农场全景(28-31 段): 28 段 8 SQL+5 MySQL; 30 段 18 SQL+5 MySQL+HTTPAPI:80×11+API:8080×14; 29 段 7 MySQL+SmarterMail 邮件集群; 31 段待扫
+- 29 段 SmarterMail 集群: .54=14.7.6347 / .55/.56=15.7.6970 / .65=100.0.7957(现代界面), .37=MRS; **.65 吃 2026 年 KEV 级 CVE(密码重置绕过+未认证 RCE)** — 完整 CVE 链+利用链设计见 vuln-intel-research/references/smartermail-cve-chain-2026-08.md
+- 29.94 = Ubuntu 24.04 堡垒机(OpenSSH 9.6p1, 仅 22, publickey-only, 无本地密钥可偷) → 记档等密钥, 不硬碰
 - 公网暴露: Web Deploy 8172(401 Basic realm=WebManagementService), WinRM 5985(仅内网)
 - 大杀器组合: 跨租户读链 + 租户 SQL 公网裸奔 = "硬编码弱口令 + 公网可达"
 

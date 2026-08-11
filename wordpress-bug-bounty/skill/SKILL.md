@@ -114,8 +114,15 @@ metadata:
 - 实战（FEA acf-frontend-form-element 9000装）：已审出未认证删除链 CVSS 8.1（删 post_author=0 文章，靶场复现）+ 未认证提交 PII 泄露（靶场复现），**因 9000 装 < 50k 全部超范围不能交**；该插件唯一 High Threat 面（未认证提权链）是朋友已提交的成果不能重复交。**教训：选目标后先查装量 → 直接筛掉"超范围面"，别在删除/泄露类面上花靶场时间**
 - 推论：1k-10k 装插件上，只有"文件操作/RCE/提权/认证绕过/Options 写/SQLi/StoredXSS"值得深挖；"这插件能删对象/泄露数据"类发现直接标注超范围（除非 50k+ 装）
 
-## 漏洞价值三层评估（决定交不交）
-每个洞按三层逐步降级，三层全过才算硬洞，**任何一层失败就果断放弃或降级提交**：
+### 他人审计报告验证（2026-08-11 Everest Forms 朋友报告案例，用户要求"你看看是真实的嘛"）
+- 收到朋友/第三方/合作方审计报告 → 验证流程：① 下载目标版本源码（SVN 按文件拉关键文件最快）② 逐条对照报告 FILE:LINE 确认代码存在（**行号/函数名对得上 = 真审计，不是编的**）③ ★ **追数据流到"值进 DB/处理链前的最后一道约束"**——format()/generate_file_info()/resolve_uploads_file_from_url() 类运行时校验是静态审计最常漏的一层 ④ 判断可利用性 + 可交性（三层评估+四问照跑）
+- **判定口诀："代码存在" ≠ "漏洞成立"**——漏洞 = 代码 + 可达 + 可控 + 影响四者齐；静态报告没追到最终约束的 CRITICAL 一律验证后再说，别被"CRITICAL/HIGH"标签带偏
+- 案例要点（Everest Forms 3.5.3）：VULN-01 非认证提交——nopriv + nonce 泄露 + referer 伪造代码全真，但①公开表单 nonce 本来就公开（表单页 HTML，uid=0 共享，端点只是便捷通道）②垃圾提交 = 设计功能（CAPTCHA 在 AJAX 提交路径完整执行，token 缺失即拒）→ 不可交；VULN-04 任意文件删除——`URL→preg_replace→ABSPATH→unlink` 无 realpath 是真，但 value 双重约束（新文件 = 服务端生成 uploads 内 URL、旧文件 = resolve_uploads_file_from_url 的 baseurl 前缀+realpath+目录内校验）→ unlink 只能删 uploads 内文件 = 误报
+- **报告里的"已验证安全"栏往往是最可信的亮点**（realpath/白名单校验真实存在）；盲区清单（shortcode XSS/第三方集成回调/Elementor 渲染等未覆盖面）是继续挖的现成地图
+- 验证记录范式见 `references/everest-forms-report-verification.md`
+- **盲区深挖实战结论（Everest 案例后半段）**：验证完报告后按盲区清单继续挖——shortcode 渲染 XSS（转义完整）、成功页 entry_id（HMAC）、集成回调（权限双挡）三面全干净 → **防护质量高的现代插件（全面 escaping + HMAC + realpath 校验）盲区也大概率干净，挖 2-3 面即止别恋战**。表单类插件可复用检查点：① 提交后确认页 `?entry_id=` 回显 = hash 是否 wp_hash HMAC 签名（签名=安全，base64 裸值=IDOR）；② 字段 POST 回填值 XSS = 追 `$defaults → properties['attr']['value'] → 最终输出函数`（evf_html_attributes 全 esc_attr / textarea sanitize+esc_html = 干净）
+
+## 漏洞价值三层评估（决定交不交）每个洞按三层逐步降级，三层全过才算硬洞，**任何一层失败就果断放弃或降级提交**：
 1. **源码机制成立**（静态）：代码层面缺陷存在（nopriv 端点/权限缺失/令牌铸造）
 2. **靶场复现可达**（运行时）：实际请求链无拦截器——静态成立的洞可能被无条件 do_action 订阅者抢先 die()、或 conditions_logic 在令牌铸造时把目标 ID 置 'none'（见 wp-lab-setup.md）→ 复现时如实记录可达范围
 3. **真实场景验证**（配置开启率）：配置依赖重的洞（如"保存提交"开关）即使机制+复现都过，真实站点开启率可能极低 → 价值接近零
