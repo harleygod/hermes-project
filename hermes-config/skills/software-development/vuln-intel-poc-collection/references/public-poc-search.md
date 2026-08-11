@@ -13,6 +13,9 @@
 | nuclei-templates 文件树 | `https://api.github.com/repos/projectdiscovery/nuclei-templates/git/trees/main?recursive=1` | 匿名可用；grep `"path"` 里的关键词（如 ecology），直接看出官方有哪些该产品漏洞模板 |
 | GitHub raw 文件 | `https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>` | 拉配置文件/源码查默认密钥等 |
 | CSDN 文章 | `curl -sL <article_url> -A "<浏览器UA>"` 后解析 `id="content_views"` div | 无需登录/无验证码（实测 2026-08，156KB 正常返回）；抓标题 + 正文直接看 POC/复现细节。用户给 CSDN 链接时先 curl，不必开浏览器 |
+| NVD API keywordSearch | `https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=<厂商名>&resultsPerPage=40` | 匿名可用（实测 2026-08）；查"某产品名下有无 CVE 归属"（如 inspur 仅 5 条硬件 CVE）——CVE 层面干净是 0day/未公开的佐证之一 |
+| 搜狗网页搜索 | `https://www.sogou.com/web?query=<urlencode>` + 浏览器 UA | 国内搜索 curl 兜底（实测 2026-08，523KB 正常返回，`<h3>` 解析标题）；百度会 302 反爬，搜狗不拦。产品背景/市场地位调研首选 |
+| CSDN 搜索 API | `https://so.csdn.net/api/v3/search?q=<kw>&t=all&p=1` | 匿名 JSON（实测 2026-08）；返回 `result_vos[].title/.nickname`——查产品官方运营号/技术栈/社区版线索，比翻文章页快 |
 | 用友/泛微等厂商公告 | curl 直连常被 Cloudflare 等拦 | 见 memory 红线：被拦时申请 computer_use 浏览器或请用户截图，绝不用知识库旧数据代替 |
 
 ## 不可用/受限（踩过）

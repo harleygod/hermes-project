@@ -237,14 +237,14 @@
     "archived_at": null,
     "created_at": "2026-08-05T06:45:38.703007+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-11T05:57:31.131099+00:00",
-    "last_used_at": "2026-08-11T07:17:57.217396+00:00",
-    "last_viewed_at": "2026-08-11T07:17:57.206425+00:00",
-    "patch_count": 4,
+    "last_patched_at": "2026-08-11T07:48:52.868714+00:00",
+    "last_used_at": "2026-08-11T07:48:48.411430+00:00",
+    "last_viewed_at": "2026-08-11T07:48:48.378664+00:00",
+    "patch_count": 6,
     "pinned": false,
     "state": "active",
-    "use_count": 6,
-    "view_count": 6
+    "use_count": 9,
+    "view_count": 9
   },
   "computer-use": {
     "archived_at": null,
@@ -1056,14 +1056,14 @@
     "archived_at": null,
     "created_at": "2026-08-05T08:02:57.978301+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-11T07:03:23.905958+00:00",
-    "last_used_at": "2026-08-11T07:03:20.100019+00:00",
-    "last_viewed_at": "2026-08-11T07:03:20.079422+00:00",
-    "patch_count": 6,
+    "last_patched_at": "2026-08-11T07:57:49.376799+00:00",
+    "last_used_at": "2026-08-11T07:57:12.099830+00:00",
+    "last_viewed_at": "2026-08-11T07:57:12.086246+00:00",
+    "patch_count": 10,
     "pinned": false,
     "state": "active",
-    "use_count": 5,
-    "view_count": 5
+    "use_count": 7,
+    "view_count": 7
   },
   "vuln-intel-research": {
     "archived_at": null,
@@ -1135,13 +1135,13 @@
     "created_at": "2026-08-11T01:15:11.131697+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-08-11T07:17:40.121095+00:00",
-    "last_used_at": "2026-08-11T07:17:29.703200+00:00",
-    "last_viewed_at": "2026-08-11T07:17:29.692547+00:00",
+    "last_used_at": "2026-08-11T07:47:48.290435+00:00",
+    "last_viewed_at": "2026-08-11T07:47:48.273949+00:00",
     "patch_count": 3,
     "pinned": false,
     "state": "active",
-    "use_count": 6,
-    "view_count": 6
+    "use_count": 7,
+    "view_count": 7
   },
   "webshell-ops": {
     "archived_at": null,
@@ -1200,13 +1200,13 @@
     "created_at": "2026-08-03T02:55:23.950348+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-08-11T02:00:14.952825+00:00",
-    "last_used_at": "2026-08-11T01:59:56.047561+00:00",
-    "last_viewed_at": "2026-08-11T01:59:56.029911+00:00",
+    "last_used_at": "2026-08-11T07:47:57.975845+00:00",
+    "last_viewed_at": "2026-08-11T07:47:57.963898+00:00",
     "patch_count": 19,
     "pinned": false,
     "state": "active",
-    "use_count": 12,
-    "view_count": 12
+    "use_count": 13,
+    "view_count": 13
   },
   "wordfence-bug-bounty": {
     "archived_at": null,
