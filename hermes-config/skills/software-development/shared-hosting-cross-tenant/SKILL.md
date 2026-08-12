@@ -82,6 +82,8 @@ AjaxControlToolkit AutoComplete/Cascading 服务经典形态:
   - `(SELECT t.name AS Name FROM sys.tables t) x` / `(SELECT c.name AS Name FROM sys.columns c) x` — 表/列全量(200 上限, 分页靠 count)
   - `(SELECT [列] AS Name FROM [表]) x` — 读数据(varchar/int 都行)
   - ★ 链接服务器: **四段式直接作表名** `[sql5063].[master].[dbo].[spt_values]` (无需派生表包装!) → 跨服读其他 SQL 的 sys.databases/sql_logins/spt_values
+- ★★ 四段式**禁加别名**: `[sql5063].[master].[sys].[servers] s` 直接挂(报 `Unclosed quotation mark after 'sy Where Name Like`), 去掉别名即好; 链接服务器上只有自回环条目(`sys.servers` 返回自己)= 农场无 mesh, 每台独立, 别指望链式跳
+- 远程 `linked_logins`/`credentials` 无 Name 列 → 该通道读不出映射/凭据
 - ★ 注入约束 (解析层, 违反必挂): 子查询内**禁单引号、禁 WHERE、禁 CAST/函数/CHAR()、禁字符串拼接**; prefixText 非空 → LIKE 挂; nvarchar(max)/varbinary 列 → LIKE 挂(读不出哈希和过程定义)
 - ★ **C 参数(WHERE 列位)同样可注入**: `col` 传 `CONVERT(varchar(100), Name)` 能进查询(错误消息可见 `Where CONVERT(...) Like`), 但同样撞 LIKE 墙 — 转换/函数救不了 varbinary/max 列
 - 报错通道思路: 错误消息会回显 built SQL 片段(`Unclosed quotation mark after ... Where Name Like '%%'`), 可用来逆向存储过程拼装逻辑; 但 CONVERT(int) 错误通道被 LIKE 墙挡住, 别指望
@@ -104,6 +106,7 @@ AjaxControlToolkit AutoComplete/Cascading 服务经典形态:
 - ★ **白盒优先**: 能读编译缓存代码就别黑盒猜 — 用户明确纠正过("你在黑盒测试？" → 应走反编译审计)
 - ★ 汇报每个系统时**给出公网地址**(用户要自己去看): 从反编译视图里的硬编码 URL(如 ViewBag.OgUrl)/域名清单反查定位
 - 站点 404 全路径 = 已下线/迁走(代码还在本机缓存) — **代码先收割再验活**: 死站的代码仍值钱(域名/架构/密钥线索), 但别浪费时间打它
+- ★ **.NET Core/Kestrel 应用没有 ASP.NET 编译缓存**: 收割管线(缓存 DLL→反编译)只对 .NET Framework 应用有效; 遇 Kestrel 风 API(405/415 响应、无 temp 缓存、`cors` 池空) → 转 JS bundle 分析(webapp-frontend-mobile-recon) + API 路由探测(405=POST-only 端点、401=需真凭据), 别等缓存
 - ASP.NET Maker 系演示站(aspnetmaker.dev/hkvstore): admin/123456 经典默认口令, 但演示站只读列表+示例数据=低价值, 当弱口令发现记档即可
 - 三个目标完整评估案例(avleagues/vejoseries/hkvstore + PID 定位实证): references/tenant-hunt-2026-08.md
 
