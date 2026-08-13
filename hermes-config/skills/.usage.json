@@ -614,27 +614,27 @@
     "archived_at": null,
     "created_at": "2026-08-12T16:12:23.255723+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-12T16:12:34.057578+00:00",
-    "last_used_at": null,
-    "last_viewed_at": null,
-    "patch_count": 1,
+    "last_patched_at": "2026-08-13T07:55:17.468825+00:00",
+    "last_used_at": "2026-08-13T07:55:07.017036+00:00",
+    "last_viewed_at": "2026-08-13T07:55:07.002374+00:00",
+    "patch_count": 2,
     "pinned": false,
     "state": "active",
-    "use_count": 0,
-    "view_count": 0
+    "use_count": 2,
+    "view_count": 2
   },
   "mssql-sqli-escalation": {
     "archived_at": null,
     "created_at": "2026-08-12T15:39:16.274777+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-13T05:53:06.321766+00:00",
-    "last_used_at": "2026-08-13T05:52:36.956477+00:00",
-    "last_viewed_at": "2026-08-13T05:52:36.924506+00:00",
-    "patch_count": 4,
+    "last_patched_at": "2026-08-13T07:12:05.782373+00:00",
+    "last_used_at": "2026-08-13T07:10:12.242986+00:00",
+    "last_viewed_at": "2026-08-13T07:10:12.223263+00:00",
+    "patch_count": 10,
     "pinned": false,
     "state": "active",
-    "use_count": 6,
-    "view_count": 6
+    "use_count": 7,
+    "view_count": 7
   },
   "nano-pdf": {
     "archived_at": null,
@@ -965,14 +965,14 @@
     "archived_at": null,
     "created_at": "2026-08-11T01:14:57.498915+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-13T06:16:34.252731+00:00",
-    "last_used_at": "2026-08-13T06:15:03.325698+00:00",
-    "last_viewed_at": "2026-08-13T06:15:03.309693+00:00",
-    "patch_count": 19,
+    "last_patched_at": "2026-08-13T07:55:34.489440+00:00",
+    "last_used_at": "2026-08-13T07:55:22.305245+00:00",
+    "last_viewed_at": "2026-08-13T07:55:22.272658+00:00",
+    "patch_count": 20,
     "pinned": false,
     "state": "active",
-    "use_count": 15,
-    "view_count": 15
+    "use_count": 17,
+    "view_count": 17
   },
   "simplify-code": {
     "archived_at": null,
@@ -1200,13 +1200,13 @@
     "created_at": "2026-08-10T08:47:09.708301+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-08-13T05:52:24.165336+00:00",
-    "last_used_at": "2026-08-13T05:51:41.719956+00:00",
-    "last_viewed_at": "2026-08-13T05:51:41.705857+00:00",
+    "last_used_at": "2026-08-13T07:12:10.655763+00:00",
+    "last_viewed_at": "2026-08-13T07:12:10.643770+00:00",
     "patch_count": 9,
     "pinned": false,
     "state": "active",
-    "use_count": 11,
-    "view_count": 11
+    "use_count": 12,
+    "view_count": 12
   },
   "webshell-troubleshooting": {
     "archived_at": null,

@@ -133,6 +133,21 @@ CheckStaff/CheckEmail/CheckMobile 的 CheckText 拼进 `HashBytes('MD5','<输入
 - **MySQL 匿名账号**: root/空口令失败≠没洞 — 再试**空用户名+空口令**(匿名 `@%`, secure_installation 没跑的标志), 可能对租户库有 CRUD
 - 拿租户站点 RCE 后: 应用池账号 = 该租户身份 = 共享主机第二条腿(独立 ACL 视角), 可反哺跨租户链
 
+## Webshell 上传落地 (EduSuite 头像上传, 2026-08 实战: acecollege)
+- ★ 登录弱口令账号 (员工无角色校验, 直连 admin 页面) → EditCourseMenu.aspx 头像上传 `FileCordinatorPhoto` 字段
+  Insert 分支 (hideCourseMenuId 留空) **无扩展名白名单** → 上传 .aspx 直接落地 `/CITS_Upload/CourseMenuPhoto/<自增ID>AceCordinator.aspx`
+- ★★ 静态报告的"Update 分支路径穿越"是错的: 行 `Convert.ToInt32(hideCourseMenuId.Value)` 先抛 FormatException, 到不了 SaveAs 那行 → 路径穿越 `..\..\shell` 实际被挡, 只能走 Insert 落地受限文件名
+- 落地 ID: 列表页不显示 img 路径, 用 SQLi 查 `W_CourseMenu.CordinatorPhotoPath` (自增) 拿最新 ID
+- ★★ **webknight (AQTRONIX WAF) 延迟删除 .aspx webshell**: 上传后能跑 (whoami 成功), 几分钟后 "does not exist"
+  → 上传后立即抢时间窗口读关键文件 (web.config), 凭据先落盘再慢慢用
+- ★ 站点根在 **H 盘**: h:\root\home\<应用池>\www\<域名>\ ; cmd 默认 cwd 是 C:\Windows\System32\inetsrv, 用 Server.MapPath("~") 拿真实根
+- 落地后读 web.config 拿明文 SMSConnection 连接串 (印证租户级 db_owner, 非 sa) + machineKey + SMTP(密码是加密的)
+
+## SeImpersonatePrivilege 差异 (potato 提权入场券, 2026-08)
+- ★ `whoami /priv` 对比两应用池: `iis apppool\xxx`(IIS AppPool 虚拟账户) **默认带 SeImpersonatePrivilege**(IIS 身份模拟需要); `win8167\uscrec-001`(托管商手动建的本地账户) 特权被砍到只剩 4 个, **无** SeImpersonatePrivilege
+- ★ SeImpersonatePrivilege=Enabled 是 potato 家族 (PrintSpoofer/GodPotato) 提 SYSTEM 的入场券; Server 2022 上老版 JuicyPotato 失效, 用 PrintSpoofer (依赖 Print Spooler 服务) 或 GodPotato (更通用, 本地无 exe 需下)
+- 本地有编译好的 PrintSpoofer.exe: CobaltStrike4.5/taowu-cobalt-strike-master/script/x64/PrintSpoofer.exe (27KB)
+
 ## 红线
 - 读邻居数据 = 只读(看表名/结构可以, 别批量导数据)
 - 写链/爆破/复用测试(历史凭据跨机器测) = 必须用户批准
