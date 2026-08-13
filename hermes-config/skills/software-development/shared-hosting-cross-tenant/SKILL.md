@@ -50,7 +50,7 @@ IIS_IUSRS 有 (M,DC) → 覆盖邻居租户的编译缓存 DLL → 对方池回�
 - 单租户实例隔离良好: 只看到自己的库, sa 禁用, xp_cmdshell/OLE/clr 全关 → 提权面小
 - 内网管理网 10.10.28.0/22(ICMP 全灭, TCP 可通); SQL 农场 10.10.30.x(sql5063 等, netstat ESTABLISHED 暴露)
 - 农场全景(28-31 段): 28 段 8 SQL+5 MySQL; 30 段 18 SQL+5 MySQL+HTTPAPI:80×11+API:8080×14; 29 段 7 MySQL+SmarterMail 邮件集群; 31 段待扫
-- 29 段 SmarterMail 集群: .54=14.7.6347 / .55/.56=15.7.6970 / .65=100.0.7957(现代界面), .37=MRS; ★ 2026-08 实测三个 KEV CVE 在 .65 上**全不可利用**: 52691(上传 → 新版 /attachment-put 需 Bearer)、23760(密码重置 → 端点 force-reset-password 在 9998 管理口, 内网+公网均防火墙挡)、24423(ConnectToHub → 端点返回200但**不触发SSRF**, handler已移除连接逻辑)。老版 .54/.55/.56 的 17001(.NET remoting)/9998 同样被防火墙挡, 只剩 webmail 80/443 且 web 漏洞全加固 → **SmarterMail 全线打不动**。完整 CVE 链见 vuln-intel-research/references/smartermail-cve-chain-2026-08.md
+- 29 段 SmarterMail 集群: .54=14.7.6347 / .55/.56=15.7.6970 / .65=100.0.7957(现代界面), .37=MRS; ★ 2026-08 实测三个 KEV CVE 在 .65 上**全不可利用**: 52691(上传 → 新版 /attachment-put 需 Bearer)、23760(密码重置 → 端点 force-reset-password 在 9998 管理口, 内网+公网均防火墙挡)、24423(ConnectToHub → 端点返回200但**不触发SSRF**, handler已移除连接逻辑)。老版 .54/.55/.56 的 17001(.NET remoting)/9998 同样被防火墙挡, 只剩 webmail 80/443 且 web 漏洞全加固 → **SmarterMail 全线打不动**。另补老 CVE: CVE-2019-7214(.NET remoting 反序列化 RCE, <Build 6985, 端点 `tcp://HOST:17001/Servers`, ysoserial 风格, PoC=devzspy/CVE-2019-7214) 与 CVE-2019-7213(16.x exploit) 也是公开 RCE, 但同样打 17001 端口 → 一样被防火墙挡死; 完整 CVE 链见 vuln-intel-research/references/smartermail-cve-chain-2026-08.md
 - 29.94 = Ubuntu 24.04 堡垒机(OpenSSH 9.6p1, 仅 22, publickey-only, 无本地密钥可偷) → 记档等密钥, 不硬碰
 - 公网暴露: Web Deploy 8172(401 Basic realm=WebManagementService), WinRM 5985(仅内网)
 - 大杀器组合: 跨租户读链 + 租户 SQL 公网裸奔 = "硬编码弱口令 + 公网可达"
@@ -84,7 +84,7 @@ AjaxControlToolkit AutoComplete/Cascading 服务经典形态:
   - ★ 链接服务器: **四段式直接作表名** `[sql5063].[master].[dbo].[spt_values]` (无需派生表包装!) → 跨服读其他 SQL 的 sys.databases/sql_logins/spt_values
 - ★★ 四段式**禁加别名**: `[sql5063].[master].[sys].[servers] s` 直接挂(报 `Unclosed quotation mark after 'sy Where Name Like`), 去掉别名即好; 链接服务器上只有自回环条目(`sys.servers` 返回自己)= 农场无 mesh, 每台独立, 别指望链式跳
 - 远程 `linked_logins`/`credentials` 无 Name 列 → 该通道读不出映射/凭据
-- ★ 注入约束 (解析层, 违反必挂): 子查询内**禁单引号、禁 WHERE、禁 CAST/函数/CHAR()、禁字符串拼接**; prefixText 非空 → LIKE 挂; nvarchar(max)/varbinary 列 → LIKE 挂(读不出哈希和过程定义); ★ sys.sql_modules.definition 读不到但同视图 object_id 有值 = 存储过程 **WITH ENCRYPTION 加密**(definition 是 NULL, 不是 LIKE 墙 — 判据: object_id 返回正常而 definition 全空)
+- ★ 注入约束 (解析层, 违反必挂): 子查询内**禁单引号、禁 WHERE、禁字符串拼接**; ★ 但**零引号标量函数能执行**——实测 `(SELECT DB_NAME() AS Name) x`→返回库名、`(SELECT CONVERT(varchar(50),123) AS Name) x`→返回 123, 别死板记"禁函数"; prefixText 非空 → LIKE 挂; ★ varbinary 列读出来是字面 **"System.Byte[]"**(.NET 对 byte[] 的 ToString, 不是哈希值 — 实测 sid 列返回 System.Byte[], password_hash 返回空), 要真哈希得 CONVERT(varchar,col,1) 转 hex, 但**四段式+子查询+WHERE name='sa' 定位行会报 `Unclosed quotation mark after '...Where Name Like...'`**(存储过程拼 SQL 对含方括号点号的 TableName 引号处理坏掉, 本地无四段式子查询才正常); col 位闭合方括号 `name] ... --` 也报 `Incorrect syntax near ']'`; ★ sys.sql_modules.definition 读不到但同视图 object_id 有值 = 存储过程 **WITH ENCRYPTION 加密**(definition 是 NULL, 不是 LIKE 墙 — 判据: object_id 返回正常而 definition 全空)
 - ★ **C 参数(WHERE 列位)同样可注入**: `col` 传 `CONVERT(varchar(100), Name)` 能进查询(错误消息可见 `Where CONVERT(...) Like`), 但同样撞 LIKE 墙 — 转换/函数救不了 varbinary/max 列
 - 报错通道思路: 错误消息会回显 built SQL 片段(`Unclosed quotation mark after ... Where Name Like '%%'`), 可用来逆向存储过程拼装逻辑; 但 CONVERT(int) 错误通道被 LIKE 墙挡住, 别指望
 - 数据提取节奏: 每请求 sleep 2-4s, 连续快打会被断连(ConnectionResetError/502), 代理不稳时换服务器侧 curl 或 SOCKS 隧道
