@@ -77,6 +77,7 @@ metadata:
 - **唯一硬约束 = `@FilterValue varchar(50)` 截断**：payload 上限 50 字符。用"截断 oracle"定位：49 字符成功 / 52 字符失败 → 就是 varchar(50)。截断会吃掉 `--` 的第二个 `-`，报 `Incorrect syntax near '-'`
 - 省字符技巧（凑 50 内）: `1'` → `'`（`''` 空串也能闭合，省 1）、`' UNION` → `'UNION`（省 1 空格）。但 `password_hash`(13) + `sys.sql_logins`(15) 最短 `'UNION SELECT 1,password_hash FROM sys.sql_logins--` 仍 51 字符，超 1 卡死；`syslogins`/`sys.logins`/`logins` 短表名要么无 password_hash 列要么不存在
 - **读 varbinary 列（如 password_hash/sid）**: 直接 col= 读返回 `System.Byte[]`（.NET 读 byte[] 后 ToString）或空（NULL）——不是 hex。转 hex 需 `CONVERT(varchar(200),col,1)`（CascadeDropdown 里 payload 超截断）或 `sys.fn_varbintohexstr(col)`（须带 `sys.` 前缀，不带报 `not a recognized function name`）
+- ★ **`;` 语句分隔符被 ParseKnownCategoryValuesString 吃掉** → CascadeDropdown 里 `;EXEC xp_cmdshell` 走不通（`;` 正是 CascadingDropDown 的多值分隔符 `key:value;key2:value2`；实测 `1';SELECT 1--` 与 `1'` 报错一模一样 `'1' order by CourseName` = `;` 后内容根本没进 SQL）。AutoComplete 的 col 位闭合方括号 `name];EXEC xp_cmdshell 'whoami'--` 同样报 `Incorrect syntax near ']'`（存储过程多行 SQL 里 `--` 注释失效）。→ 两注入点一个吃 `;` 一个注释失效，**恰好卡死"执行存储过程"这条命令执行路径**；叠加 password_hash 权限墙 = 数据库→OS 权限在当前库级权限下彻底关闭（除非换有更长参数/不吃 `;` 的注入点）
 
 ### password_hash 权限墙（不是技术墙，别死磕）
 
