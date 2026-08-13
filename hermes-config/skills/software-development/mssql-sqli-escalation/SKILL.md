@@ -55,12 +55,33 @@ metadata:
 - 顺带: `[sql5063].[master].[sys].[servers]` 四段式读 = 找更多链接服务器（链式跳转）;
   `sys.databases` 四段式读 = 横向扩数据面（每台 SQL 常挂 1-3 个租户库）
 
+### 先验证链接服务器是不是横向跳板（别假设）
+
+实测打脸：sql5063 的 `sys.databases` 四段式读只返回 `DB_A6B40D_Ace + master + tempdb`（= 本地库的镜像对），
+`sys.servers` 只有它自己（无链式跳转）。即**这个链接服务器只是本地库的镜像/备用，不是横向跳板**，上面没有别的租户库可读。
+跃迁前先跑两条只读验证，别默认"链接服务器=横向"：
+1. `[server].[master].[sys].[databases]` col=name → 看上面到底挂几个库（只有本地库镜像 = 镜像对，无横向价值）
+2. `[server].[master].[sys].[servers]` col=name → 看有没有链式跳转（只有自己 = 无链式）
+
+农场模型（site4now/smarterasp）：每租户独立 SQL 实例、无 mesh。拿到单个 sa 大概率只能管单台（及其镜像），
+"通吃农场"依赖"sa 密码全场统一"这个未验证假设——别把破 sa 哈希当成必由之路。
+
 ## 红线
 
 - 只读 SELECT 探测可自行进行; xp_cmdshell / 任何写/执行必须先获批
 - 在线猜密码会锁账号（acecollege admin 被 8 次失败锁死 = 可见影响）→ 永远优先哈希离线爆破
 - prefixText 参数是潜在次级注入面（非空前缀挂的机制值得单独验证），先测只读形态
 - 多方向策略讨论: 先大白话讲清每条路子的机制/回报/风险，等用户拍板再跑探测（用户会中途喊停确认思路）
+
+## EduSuite 应用层跃迁（比注入跃迁更短的路）
+
+当注入点约束卡死（函数/WHERE/拼接被墙、sa 哈希读不出）时别死磕——EduSuite 类系统的**权限模型漏洞**常是更短的路：
+
+- **权限模型只校验登录态不校验角色**：母版页 `AccountMaster` 只判 `Session["UserId"]` 是否为空；admin 判断 `UserTypeId ∈ {1,2}` 只用于菜单显示/隐藏，**不是鉴权**。普通员工登录后直连 admin 页面（EditStaff/ViewUserType/MenuAccess 等）全部 200 无鉴权。
+- **员工密码 = 手机号哈希**：源码 `UpdateStaff`/新建员工无条件 `@Password = Encryption(StaffMobile)`，`Encryption = SHA1(UTF-16LE)+Base64`。读 `M_Staff.StaffMobile` 列算哈希可秒破普通员工密码（admin/citsadmin 例外，密码非手机号）。注意两列独立 `SELECT TOP` 读取**行序会错位**，对齐需 JOIN 或按 StaffId。
+- **员工登录 → 提权/上传 → RCE**：用已破弱密码员工账号登录（`Login.aspx` WebForms POST，先 GET 拿 VIEWSTATE/EVENTVALIDATION），登录后 EditStaff 可重置 admin 密码（写操作）、CourseMenu 上传任意扩展名落 .aspx（写操作）。实测 satish/55555 登录成功且 admin 页面全可达。
+- **上传点校验修正（别信 task3 的"路径穿越"）**：CourseMenu 的 `EditCourseMenu.aspx` 上传，Update 分支里 `hideCourseMenuId` 会被 `Convert.ToInt32()` 强转（非 int 直接抛异常，SaveAs 不执行），所以**路径穿越不可行**；Insert 分支文件名 = 自增 `CourseMenuID + "AceCordinator." + ext`。Slide/BulkData 同理：原文件名虽拼进路径，但前缀是自增 ID/时间戳，只能**任意扩展名**（无白名单）落 .aspx 到固定上传目录，不能穿越到 web 根外。落盘文件名（自增 ID / 秒级时间戳）可预测或爆破。
+- 关键教训：**别默认"必须破 admin 密码"**。弱密码普通账号 + 无角色校验 = 实际 admin 权限，比调 UNION 读 sa 哈希短得多。
 
 ## 脚本骨架
 
