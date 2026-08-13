@@ -108,13 +108,13 @@
     "created_at": "2026-08-10T02:38:39.665513+00:00",
     "created_by": null,
     "last_patched_at": null,
-    "last_used_at": "2026-08-10T02:38:39.675804+00:00",
-    "last_viewed_at": "2026-08-10T02:38:39.665513+00:00",
+    "last_used_at": "2026-08-13T09:25:06.577733+00:00",
+    "last_viewed_at": "2026-08-13T09:25:06.568235+00:00",
     "patch_count": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 1,
-    "view_count": 1
+    "use_count": 2,
+    "view_count": 2
   },
   "black-box-web-pentest": {
     "archived_at": null,
@@ -628,13 +628,13 @@
     "created_at": "2026-08-12T15:39:16.274777+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-08-13T08:13:21.818303+00:00",
-    "last_used_at": "2026-08-13T08:17:44.885349+00:00",
-    "last_viewed_at": "2026-08-13T08:17:44.857461+00:00",
+    "last_used_at": "2026-08-13T09:27:46.564915+00:00",
+    "last_viewed_at": "2026-08-13T09:27:46.548590+00:00",
     "patch_count": 11,
     "pinned": false,
     "state": "active",
-    "use_count": 11,
-    "view_count": 11
+    "use_count": 12,
+    "view_count": 12
   },
   "nano-pdf": {
     "archived_at": null,
@@ -965,14 +965,14 @@
     "archived_at": null,
     "created_at": "2026-08-11T01:14:57.498915+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-13T08:25:40.477326+00:00",
-    "last_used_at": "2026-08-13T08:25:24.871872+00:00",
-    "last_viewed_at": "2026-08-13T08:25:24.842756+00:00",
-    "patch_count": 23,
+    "last_patched_at": "2026-08-13T09:51:24.988972+00:00",
+    "last_used_at": "2026-08-13T09:48:45.855692+00:00",
+    "last_viewed_at": "2026-08-13T09:48:45.822731+00:00",
+    "patch_count": 27,
     "pinned": false,
     "state": "active",
-    "use_count": 22,
-    "view_count": 22
+    "use_count": 23,
+    "view_count": 23
   },
   "simplify-code": {
     "archived_at": null,
@@ -1238,14 +1238,14 @@
     "archived_at": null,
     "created_at": "2026-08-03T02:55:23.950348+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-13T08:26:08.440214+00:00",
-    "last_used_at": "2026-08-13T08:25:52.661714+00:00",
-    "last_viewed_at": "2026-08-13T08:25:52.649710+00:00",
-    "patch_count": 29,
+    "last_patched_at": "2026-08-13T09:35:28.251692+00:00",
+    "last_used_at": "2026-08-13T09:34:10.938578+00:00",
+    "last_viewed_at": "2026-08-13T09:34:10.929194+00:00",
+    "patch_count": 33,
     "pinned": false,
     "state": "active",
-    "use_count": 26,
-    "view_count": 26
+    "use_count": 29,
+    "view_count": 29
   },
   "wordfence-bug-bounty": {
     "archived_at": null,
