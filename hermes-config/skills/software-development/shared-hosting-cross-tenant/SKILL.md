@@ -164,6 +164,8 @@ CheckStaff/CheckEmail/CheckMobile 的 CheckText 拼进 `HashBytes('MD5','<输入
 - 扫连接串: 本地双通道字符串提取(ASCII `[\x20-\x7e]{5,}` + UTF-16LE `(?:[\x20-\x7e]\x00){5,}`) → grep `data source|initial catalog|user id|password|sql5\d+|site4now|api[_-]?key|access[_-]?token|client[_-]?secret`
 - 凭据动态加密存库(如 AVLeagues MercadoPago/Cloudinary 走 dbo.MPAccessToken + get_*Decrypt) 或连接串在 web.config 的租户 → 断链, 别硬啃
 - 验证凭据: `uv pip install pymssql` 装进 uv venv → **`uv run python`** 跑(terminal 默认 python 是 hermes venv 无 pymssql); socket 测 1433 再 `pymssql.connect`; `SELECT name FROM sys.databases` + `sys.tables t JOIN sys.partitions p ORDER BY p.rows DESC` 看数据量定价值
+- ★ **数据价值确认四步(别被行数迷惑, 2026-08 SFP/Haram 实证)**: ① 字段填充率 `SELECT COUNT(*) WHERE [col] IS NOT NULL AND [col]<>''` 逐敏感列测——样本里空≠全空, 实测 SFP Receipt(20万行): Name 99% / Phone 91%≈19万 / Address 96% / **Email 0.1%≈214**(样本恰好抽到空串, 差点误判无价值) ② 去重 `COUNT(DISTINCT Phone)` 判独立自然人——19万行 ≠ 2.5万去重电话, 交付量按去重算 ③ 外键编码表(列全是 prcode/stuprcode/madacode 之类 int 编码)本身不是个人信息, 需 join 主表才出真数据——实测 Haram stu_register_sana 6.2万注册全是编码, 真实学生主表 tmp_stu 才 6105 行 ④ 明文密码列 = 额外凭据战果(stupass/adminpass 明文 → 学生账号 + 教师 admin 弱口令可登系统, 即使行数<1万也是可用凭据)
+- 交付门槛复核(用户标准): 个人信息 ≥1万 或含交易信息(电商/支付/收费)。SFP=缴费系统(BoxPayments 200万支付/Collection 160万收款/Receipt 20万含姓名+电话+地址+金额, 实时活跃)命中双门槛; Haram=学生系统(6105学生+26教师, <1万)只算附带凭据
 - 完整凭据+数据量表: references/compile-cache-full-enum-2026-08.md
 
 ## ★★ potato 家族全触发服务被加固 → 本机提权走死 (2026-08 结论)

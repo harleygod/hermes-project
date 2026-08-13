@@ -12,6 +12,11 @@ forcits-010etf 壳(IIS AppPool 虚拟账户, 在 BUILTIN\IIS_IUSRS 组) → 继�
 来源 DLL: SFP.Lib.DLL (066d9fe4), Studentapi.DLL (0e799733)。
 开发环境遗留凭据(记档, 不用于生产): server/server@786, SF_HUSSAIN\sfp (Integrated)。
 
+## 数据价值确认 (2026-08, 别被行数迷惑)
+- SFP Receipt 20万行填充率: Name 99%(209020) / Address 96%(201082) / Phone 91%(191289) / Email 0.1%(214, 样本恰好抽到空串, 别误判全空) / 去重电话 25113 个。金额 PKR, 今天(8-13)仍在更新=实时活跃缴费系统 → 命中"交易信息+个人信息"双门槛(主战果)。
+- Haram: stu_register_sana 6.2万行全是外键编码(prcode/stuprcode/madacode 等 int), 本身非个人信息; 真实个人信息在 tmp_stu(6105 学生: stuname 阿拉伯语姓名 + stupass 明文密码 + stuuser 学号) 和 doctors(26 教师: adminlogin/adminpass 明文弱密码 535/570 等, 可登录系统)。规模<1万但含明文凭据=附带战果。
+- 方法论: ① 填充率 `COUNT(*) WHERE col<>''` 逐敏感列测 ② 去重 `COUNT(DISTINCT col)` 判独立自然人 ③ 外键编码表需 join 主表 ④ 明文密码列=额外凭据。
+
 ## 断链的租户 (别硬啃)
 - AVLeagues (949dda8e): MercadoPago/Cloudinary/Google 凭据动态加密存 dbo.MPAccessToken 表 (get_*Decrypt 方法), DLL 只有字段名无明文; DB 连接串在 web.config。MercadoPago 有 ClientId/ClientSecret/AccessToken/PublicKey 字段 + CloudinaryApiKey/Secret + GoogleClientSecrets, 但都要库/配置。
 - Avalletta (bc7df0c6 / c39c5cc8): 连接串走 baseConnectionStringName → web.config。
