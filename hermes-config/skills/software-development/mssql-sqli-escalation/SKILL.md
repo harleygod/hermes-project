@@ -83,6 +83,17 @@ metadata:
 - **上传点校验修正（别信 task3 的"路径穿越"）**：CourseMenu 的 `EditCourseMenu.aspx` 上传，Update 分支里 `hideCourseMenuId` 会被 `Convert.ToInt32()` 强转（非 int 直接抛异常，SaveAs 不执行），所以**路径穿越不可行**；Insert 分支文件名 = 自增 `CourseMenuID + "AceCordinator." + ext`。Slide/BulkData 同理：原文件名虽拼进路径，但前缀是自增 ID/时间戳，只能**任意扩展名**（无白名单）落 .aspx 到固定上传目录，不能穿越到 web 根外。落盘文件名（自增 ID / 秒级时间戳）可预测或爆破。
 - 关键教训：**别默认"必须破 admin 密码"**。弱密码普通账号 + 无角色校验 = 实际 admin 权限，比调 UNION 读 sa 哈希短得多。
 
+## CheckAvailability 二阶注入实测不成立（别信静态分析"拼接=可注入"）
+
+task3 静态分析把 `CheckAvailability("HashBytes('MD5',列)", "HashBytes('MD5','" + CheckText + "')", "M_Staff")` 判为"二阶注入面很大"——**oracle 实测否掉了**：
+
+- 端点：`/Transactions/EnquiryNew/LeadBulkUpload.aspx/CheckStaff`（或 CheckEmail/CheckMobile），POST `{"CheckText":"..."}`，需员工登录态（satish 弱口令可登）
+- 注入串形态：CheckStaff `HashBytes('MD5','<输入>')`；CheckMobile 更简单 `'<输入>'` 直接拼；理论 payload `x') OR '1'='1--` / `x' OR '1'='1--`
+- **oracle 实测全部无反应**：布尔型 `OR '1'='1`（该让结果反转/恒真）返回不变；报错型 `; SELECT * FROM __nonexist__--`（该报 Invalid object）不报 → 存储过程 `Check_Existance_ByType` 内部参数化/转义了，注入不成立
+- **definition 读不到 = WITH ENCRYPTION**：`sys.sql_modules.object_id` 能读（返回 int），但 `definition` 列 `LIKE '%%'` 返回空数组 → 存储过程加密。加密 = 读不到定义，只能靠 oracle 实测确认拼接方式
+
+**方法论**：静态分析看到"字符串拼接进存储过程参数"只能算"疑似注入面"，必须用**布尔型 + 报错型双 oracle** 实测定案——两条都无反应 = 参数化/转义，收手。别把子 agent/弱模型的静态推测当结论（本会话 task3 的"二阶注入面很大"就是没实测的推测）。
+
 ## 脚本骨架
 
 ```python

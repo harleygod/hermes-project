@@ -50,7 +50,7 @@ IIS_IUSRS 有 (M,DC) → 覆盖邻居租户的编译缓存 DLL → 对方池回�
 - 单租户实例隔离良好: 只看到自己的库, sa 禁用, xp_cmdshell/OLE/clr 全关 → 提权面小
 - 内网管理网 10.10.28.0/22(ICMP 全灭, TCP 可通); SQL 农场 10.10.30.x(sql5063 等, netstat ESTABLISHED 暴露)
 - 农场全景(28-31 段): 28 段 8 SQL+5 MySQL; 30 段 18 SQL+5 MySQL+HTTPAPI:80×11+API:8080×14; 29 段 7 MySQL+SmarterMail 邮件集群; 31 段待扫
-- 29 段 SmarterMail 集群: .54=14.7.6347 / .55/.56=15.7.6970 / .65=100.0.7957(现代界面), .37=MRS; **.65 吃 2026 年 KEV 级 CVE(密码重置绕过+未认证 RCE)** — 完整 CVE 链+利用链设计见 vuln-intel-research/references/smartermail-cve-chain-2026-08.md
+- 29 段 SmarterMail 集群: .54=14.7.6347 / .55/.56=15.7.6970 / .65=100.0.7957(现代界面), .37=MRS; ★ 2026-08 实测三个 KEV CVE 在 .65 上**全不可利用**: 52691(上传 → 新版 /attachment-put 需 Bearer)、23760(密码重置 → 端点 force-reset-password 在 9998 管理口, 内网+公网均防火墙挡)、24423(ConnectToHub → 端点返回200但**不触发SSRF**, handler已移除连接逻辑)。老版 .54/.55/.56 的 17001(.NET remoting)/9998 同样被防火墙挡, 只剩 webmail 80/443 且 web 漏洞全加固 → **SmarterMail 全线打不动**。完整 CVE 链见 vuln-intel-research/references/smartermail-cve-chain-2026-08.md
 - 29.94 = Ubuntu 24.04 堡垒机(OpenSSH 9.6p1, 仅 22, publickey-only, 无本地密钥可偷) → 记档等密钥, 不硬碰
 - 公网暴露: Web Deploy 8172(401 Basic realm=WebManagementService), WinRM 5985(仅内网)
 - 大杀器组合: 跨租户读链 + 租户 SQL 公网裸奔 = "硬编码弱口令 + 公网可达"
@@ -84,7 +84,7 @@ AjaxControlToolkit AutoComplete/Cascading 服务经典形态:
   - ★ 链接服务器: **四段式直接作表名** `[sql5063].[master].[dbo].[spt_values]` (无需派生表包装!) → 跨服读其他 SQL 的 sys.databases/sql_logins/spt_values
 - ★★ 四段式**禁加别名**: `[sql5063].[master].[sys].[servers] s` 直接挂(报 `Unclosed quotation mark after 'sy Where Name Like`), 去掉别名即好; 链接服务器上只有自回环条目(`sys.servers` 返回自己)= 农场无 mesh, 每台独立, 别指望链式跳
 - 远程 `linked_logins`/`credentials` 无 Name 列 → 该通道读不出映射/凭据
-- ★ 注入约束 (解析层, 违反必挂): 子查询内**禁单引号、禁 WHERE、禁 CAST/函数/CHAR()、禁字符串拼接**; prefixText 非空 → LIKE 挂; nvarchar(max)/varbinary 列 → LIKE 挂(读不出哈希和过程定义)
+- ★ 注入约束 (解析层, 违反必挂): 子查询内**禁单引号、禁 WHERE、禁 CAST/函数/CHAR()、禁字符串拼接**; prefixText 非空 → LIKE 挂; nvarchar(max)/varbinary 列 → LIKE 挂(读不出哈希和过程定义); ★ sys.sql_modules.definition 读不到但同视图 object_id 有值 = 存储过程 **WITH ENCRYPTION 加密**(definition 是 NULL, 不是 LIKE 墙 — 判据: object_id 返回正常而 definition 全空)
 - ★ **C 参数(WHERE 列位)同样可注入**: `col` 传 `CONVERT(varchar(100), Name)` 能进查询(错误消息可见 `Where CONVERT(...) Like`), 但同样撞 LIKE 墙 — 转换/函数救不了 varbinary/max 列
 - 报错通道思路: 错误消息会回显 built SQL 片段(`Unclosed quotation mark after ... Where Name Like '%%'`), 可用来逆向存储过程拼装逻辑; 但 CONVERT(int) 错误通道被 LIKE 墙挡住, 别指望
 - 数据提取节奏: 每请求 sleep 2-4s, 连续快打会被断连(ConnectionResetError/502), 代理不稳时换服务器侧 curl 或 SOCKS 隧道
@@ -99,6 +99,8 @@ CheckStaff/CheckEmail/CheckMobile 的 CheckText 拼进 `HashBytes('MD5','<输入
 
 ## 活跃租户定位 (谁连着农场 = 谁有农场凭据) (2026-08 实战)
 - `netstat -ano | findstr 1433` → 本机**每个租户 w3wp 的 PID + 内网农场 IP**(10.10.30.x/31.x:1433, 连接多=活跃)
+- ★ **netstat 全景端口 = 端口侦察终极情报源(零隧道压力)**: 全文解析 netstat 所有 ESTABLISHED 连接的远端 IP:端口 → 即本机在连的全部内网服务(真实端口, 不漏改端口的服务)。一锤定音回答"服务是否改了端口": 实测 20台SQL全1433 + MySQL全3306 + HTTP全80/8080 + DNS53 = **标准化托管无改端口**(托管商 provisioning 自动化 + 内网已有防火墙, 无改端口动力; 主动扫描会漏改端口的服务, netstat 不会)
+- ★★ **fscan 挂 SOCKS5 隧道扫大段 = 失效**: 每 TCP 连接=2-4次 HTTP 轮询, /24×22端口≈1.7万请求压爆 webshell; 且 fscan 存活探测(ICMP 不能走 SOCKS5 + TCP 补充探测失效)导致"存活主机数0/已扫描0目标"。→ webshell 隧道下放弃全段主动扫描, 改用 netstat 驱动 + 慢速串行针对性探测(单线程)
   - 40+ 连接到同一台 = 忙碌租户应用(实战: PID 25104 → 10.10.30.36 = 收费系统)
 - **wmic process / tasklist / taskkill 全被应用池账号挡**(假报错"用户名或密码错误") → PID→进程名不可直接查
 - 替代定位法: `dir "Temp Root" /o:-d` → **最新编译目录 = 活跃租户**; 或 `netstat -ano | findstr LISTENING` 找本地端口→PID→对应 localhost 服务(25813 Nuxt / 10107 API / 25873 Kestrel 等=邻居租户的进程)

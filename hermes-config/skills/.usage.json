@@ -627,14 +627,14 @@
     "archived_at": null,
     "created_at": "2026-08-12T15:39:16.274777+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-13T02:12:06.537960+00:00",
-    "last_used_at": "2026-08-13T02:41:20.772718+00:00",
-    "last_viewed_at": "2026-08-13T02:41:20.759663+00:00",
-    "patch_count": 3,
+    "last_patched_at": "2026-08-13T05:53:06.321766+00:00",
+    "last_used_at": "2026-08-13T05:52:36.956477+00:00",
+    "last_viewed_at": "2026-08-13T05:52:36.924506+00:00",
+    "patch_count": 4,
     "pinned": false,
     "state": "active",
-    "use_count": 5,
-    "view_count": 5
+    "use_count": 6,
+    "view_count": 6
   },
   "nano-pdf": {
     "archived_at": null,
@@ -965,14 +965,14 @@
     "archived_at": null,
     "created_at": "2026-08-11T01:14:57.498915+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-13T03:45:08.623745+00:00",
-    "last_used_at": "2026-08-13T03:44:32.230357+00:00",
-    "last_viewed_at": "2026-08-13T03:44:32.221820+00:00",
-    "patch_count": 14,
+    "last_patched_at": "2026-08-13T06:02:17.826503+00:00",
+    "last_used_at": "2026-08-13T06:00:27.267235+00:00",
+    "last_viewed_at": "2026-08-13T06:00:27.251419+00:00",
+    "patch_count": 17,
     "pinned": false,
     "state": "active",
-    "use_count": 13,
-    "view_count": 13
+    "use_count": 14,
+    "view_count": 14
   },
   "simplify-code": {
     "archived_at": null,
@@ -1199,14 +1199,14 @@
     "archived_at": null,
     "created_at": "2026-08-10T08:47:09.708301+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-11T06:46:55.152264+00:00",
-    "last_used_at": "2026-08-13T02:19:28.298161+00:00",
-    "last_viewed_at": "2026-08-13T02:19:28.288157+00:00",
-    "patch_count": 8,
+    "last_patched_at": "2026-08-13T05:52:24.165336+00:00",
+    "last_used_at": "2026-08-13T05:51:41.719956+00:00",
+    "last_viewed_at": "2026-08-13T05:51:41.705857+00:00",
+    "patch_count": 9,
     "pinned": false,
     "state": "active",
-    "use_count": 10,
-    "view_count": 10
+    "use_count": 11,
+    "view_count": 11
   },
   "webshell-troubleshooting": {
     "archived_at": null,
