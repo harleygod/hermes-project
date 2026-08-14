@@ -78,6 +78,15 @@ metadata:
   - user 闸门无 is_author 豁免：渲染令牌时 `user_id` 被置 `'none'` → 删用户链默认不可达
   - 结论要写"能删 post_author=0 文章，删用户被拦"，不要笼统写"任意对象删除"
 
+### D6. 数据驱动表单配置伪造 + user meta 直写提权（ACF 系 P0 建管理员链）
+- **本质**：这类表单插件的"表单"是**配置对象**（save_to=、login_user、字段数组全在配置里），渲染/提交代码通用、按配置执行——**"谁能看表单"的门控 ≠ "表单能干什么"的校验**；配置来源不可信即越权。单看每环都像正常功能（投稿/切换表单/注册），组合才是 9.8
+- **审计法**：①找表单配置的加载入口（change_form 类端点 form_data 参数、Gutenberg 块解析、acf_form 短代码）能否指向攻击者可控内容；②找配置里能指定 `save_to_user=new_user / login_user=1` 的路径；③追提交执行处有无 current_user_can
+- **add_user 创建路径无闸门**（反模式）：`if('add_user' !== $user_id){ ... current_user_can('edit_user') }` —— 作者只给 edit_user 加闸门、add_user 特例放行（假设只有管理员能建表单配置；配置可伪造时假设崩塌）。3.29.10 修复 edit_user 内联闸门后 add_user 仍裸奔
+- **字段 name 直写 user meta（ACF 系死穴）**：`acf_update_value → acf_update_metadata($post_id, $field['name'], $value)`，字段 name 无保护键名单直接成 meta 键 → `name="wp_capabilities"` + `['administrator'=>1]` = 建管理员。看到 `update_metadata('user'...`/`acf_update_metadata('user'...` 条件反射：**能写 user meta = 能提权**
+- **Gutenberg 块注释注入通道**：post_content 字段提交 `<!-- wp:插件/块 {"form_settings":{"save_to_user":"new_user","login_user":1}} /-->`；表单勾选 Allow Unfiltered HTML（no_kses=1）时 `if($form['kses']){ sanitize }` 整段跳过（wp_kses_post 不执行）→ 块 JSON 完整存储 → change_form 传 `{post_id}_gutenberg_{key}` 让服务端解析伪造块、渲染"攻击者定义的表单"并签发 nonce → 组合 login_user=1 = 未认证建管理员+自动登录（wp_set_auth_cookie）
+- **no_kses 只是通道之一**：捆绑 ACF acf_form、低权限账号+REST API 等通道同样可注入——根因（add_user 无闸门 + meta 直写）不依赖单一配置，报告要写明
+- 完整链实例（5 环节、精确行号、PoC 脚本解读）→ 见 `references/acf-frontend-no-kses-privesc-chain.md`
+
 ## 交付：Wordfence 提交材料（用户惯例）
 
 审计目标产可上交漏洞平台（Wordfence）的材料。文件命名 `WORDFENCE_SUBMISSION_<漏洞名>_中文版.md`，结构：
@@ -109,6 +118,7 @@ metadata:
 - `references/acf-frontend-3-29-10-findings.md` — ACF Frontend (acf-frontend-form-element) 3.29.10 自由版 6 假设逐条验证明细（共享 nonce 根因、附件枚举链、submissions IDOR P0、上传直链、用户枚举、排除项）
 - `references/acf-frontend-delete-object-chain.md` — delete_object 短路绕过链（nopriv 删任意用户/文章）、change_form 令牌铸造、options 分支对照、plans CRUD 缺能力检查，含精确行号
 - `references/acf-frontend-submission-data-leak.md` — 未认证提交数据泄露链（P0-3）：add_form→do_action→get_form 无权限→render_form 跳过 show_form 门控，完整行号+同端点其他 data_type+第二期关联洞清单+Wordfence 提交材料指引
+- `references/acf-frontend-no-kses-privesc-chain.md` — 未认证建管理员链（D6 实例）：Gutenberg 块注释注入（no_kses 通道）+ add_user 无闸门 + 字段 name 直写 wp_capabilities + login_user 自动登录，5 环节精确行号+手动复现 3 请求+WP→Java 概念翻译表
 - `references/wordpress-upload-mime-verification.md` — 上传 mime 校验实证判定法：WP core 版本差异（get_allowed_mime_types 返回值/匿名剔除 html|js/php 系不在映射/wp_check_filetype(null) 语义）、双扩展名落盘取末扩展名、if-else 兜底恒执行陷阱、本会话 ACF Frontend 3.29.10 实证结论
 - `scripts/wp-mime-sim.php` — 上传校验模拟器：下载 WP core functions.php 后跑 `php wp-mime-sim.php <path> [额外文件名...]`，输出每个扩展名的 wp_check_filetype type 与插件式判定 PASS/NO（含匿名/双扩展名/大小写变体）
 
@@ -120,5 +130,6 @@ metadata:
 - 输出条目必须带 FILE:LINE；利用方式简述不写代码块/表格
 - 不确定的写 `UNCERTAIN: 原因`，不编造结论
 - **旧报告污染**：项目目录有历史审计报告时，读完会把已报告链划为"已知项"停止独立推导——把旧报告当"验证清单"而非"划掉清单"，对已报告根因强制做变体穷举
+- **他人提交材料先核验再教**：接手 Wordfence 提交文档（朋友/子 agent 写的），引用代码 FILE:LINE 先对照本地源码逐一核实再讲解/转发——路径笔误与版本漂移常见（实例：报告写 actions/submit.php，实际在 classes/submit.php）；核验顺带发现报告遗漏点（如"修复后仍有通道"）
 - **倒推优先**：端点正推（哪些 nopriv 端点→缺陷）容易漏提权链；先倒推"未认证拿权限的最短路"（权限来源→触发点→注入通道）再进端点扫描
 - **子 Agent 静态盲区**：多 Agent 并行只能读码，执行顺序/注册顺序问题（同 hook 同 priority 谁先注册、谁抢先 die）必须靶场实测；静态结论标注"未实测"
