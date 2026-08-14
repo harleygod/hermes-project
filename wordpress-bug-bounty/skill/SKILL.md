@@ -164,6 +164,7 @@ metadata:
    - **nonce 只防 CSRF，不防"未认证用户自己操作"**：前端公开页面渲染的表单 nonce（wp_nonce_field 在模板输出）= 未认证可提取且验证通过（uid 0 共享 nonce）→ 处理器只要有 wp_verify_nonce 但**无 current_user_can**，业务操作（状态修改/接受报价/转发票）即未认证可利用。判定法：搜"前端输出 nonce + 处理器仅 nonce 无 capability"的 AJAX/POST 处理器
    - **nonce 通用机制教学（2026-08-10 FEA 讲解，用户已懂）**：nonce = 哈希(动作名+用户ID+会话+12h 时间窗)，是"这请求是本站用户主动发的"防伪标签（防 CSRF），**不是资格证明**；未登录用户 uid=0+空 token → 全站访客共享同一 nonce 值；不绑定操作对象（动作名是字符串，key 可控即换校验对象）。**判断口诀：`wp_verify_nonce(存在)` 只说明防了 CSRF；`current_user_can(存在)` 才说明查了权限；两者缺一不可，nonce 永远不能替代权限检查**——审计时"只有 nonce 无权限检查"的端点一律当未认证可打来验证
    - **前端表单插件删除链模式（FEA P0-1 教学案例，2026-08-10）**：ACF Frontend/Frontend Admin 类"前端表单"插件（前端发帖/编辑/删自己的内容）的删除功能 = 4 环节组合洞：① nopriv 删除端点 + **共享 nonce**（fea_delete_{key}，key 自己传）只证明"你是访客"；② 权限检查短路（表单可见即 `$allowed_by_settings=true`，删谁由令牌决定）；③ **令牌可铸造**（change_form 端点任意 item_id → absint → 服务端铸造加密 _acf_objects 令牌）；④ **修复的作者校验对象错位**（`post_author == $user->ID`，未认证 $user->ID=0 匹配 post_author=0 的文章）。判定法：凡"nopriv 端点 + 固定前缀共享 nonce + 权限检查引用表单配置/被短路 + 操作对象来自可铸造令牌" = 前端表单插件删除/编辑链，逐环节验证；修复版本重点看"校验对象"是否与操作对象错位（作者 ID vs 对象归属）
+   - **前端表单插件提权链模式（FEA ChainQ 姊妹链，2026-08-14 源码级验证）**：同插件的未认证→管理员链 = 配置驱动信任边界崩溃：① 表单配置决定行为（save_to_*/login_user/字段 name→meta 键），攻击者伪造配置（块注释注入，需 no_kses=1 跳过 kses）→ ② change_form 任意 form_data 加载任意配置（含攻击者文章的块）→ ③ add_user 路径无 current_user_can（3.29.10 只修了 edit_user 路径）→ ④ 字段 name 直写 user meta（acf-value-functions.php:224，无敏感键白名单）→ `wp_capabilities`=administrator → ⑤ login_user 自动登录。**复用要点**：a) 配置驱动表单先问"配置谁给的"；b) add_user/edit_user 双路径逐路径查闸门；c) ACF 系 `acf_update_metadata($post_id,$field['name'],...)` 无白名单 = 提权通病。完整五步链+前置条件矩阵+靶场核对命令+WP→Java 教学对照表见 `references/fea-chainq-privesc-chain.md`
    - 上传/导入/CSV/备份类插件：文件操作 RCE 高发；但注意 WP `get_allowed_mime_types()` 对匿名用户剔除 html/js/php\n   - **内容保护/会员插件绕过（restrict-user-access 案例，2026-08）**：核心保护常只在 `template_redirect` 触发（level.php authorize_access）→ 绕过面 = 不触发前端模板的通道：**XML-RPC / REST / feed / admin-ajax / 短代码**。**XML-RPC 最干净**：WP 核心默认开启，wp.getPost/getRecentPosts 对 publish 文章返回完整 post_content，插件若无 xmlrpc 拦截 → 订阅者凭证直接读会员文章全文（CWE-862，击穿插件核心价值）。判定法：全项目 grep `xmlrpc` 无拦截即成立；REST 可能已有 rest_authentication_errors 保护（默认拒绝未认证+非 edit_posts）但 XML-RPC 完全不受影响。靶场注意：WPCA/content-aware-engine 类插件条件为 SQL 级深度集成+缓存（option `_ca_condition_type_cache`），手动写 meta 不生效，需 UI 配置或走保存接口，静态链完整时记录卡点交用户决策
 4. **静态分析 ≠ 运行时**（本 skill 最重要教训）：
    - 子 Agent 静态读码会漏"运行时拦截"：某端点可能注册了无条件的 do_action 订阅者抢先 `die()`（本案例 related-items 拦截 add_form → 提交数据读取主链不可达）；3.29.10 的 conditions_logic 在令牌铸造渲染时把目标 ID 置 'none'（用户删除被拦）
@@ -231,6 +232,7 @@ metadata:
 
 ## 靶场复现（Windows/phpStudy）
 - 详细步骤/坑/表单构造：references/wp-lab-setup.md
+- **★ 重放 FEA 表单链前必读** wp-lab-setup.md 的"FEA 表单提交重放四大坑"：① 改插件代码必须改运行实例（wp-content/plugins/ 下），源码副本（D:\Documents\sources\...）改了不生效（ls -i 判同否）；② form_submit 必须带页面全部 hidden（含 `_acf_objects`，否则 success=True 但对象不建）；③ change_form 用页面 JSON `"nonce":"..."`，form_submit 用 `_acf_nonce`；④ form_key 必须 `form_` 前缀才能走 load_data 完整路径
 - 核心：WP 6.x + PHP 8 + 插件最新版；构造最小表单（admin_form post + acf-field posts）走真实渲染；未认证（无痕）跑 PoC
 - ACF 字段 post 结构：**post_name=字段key，post_excerpt=字段name，post_content=serialize(设置数组)**
 
