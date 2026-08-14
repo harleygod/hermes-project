@@ -234,6 +234,7 @@ metadata:
 - 详细步骤/坑/表单构造：references/wp-lab-setup.md
 - **★ 重放 FEA 表单链前必读** wp-lab-setup.md 的"FEA 表单提交重放四大坑"：① 改插件代码必须改运行实例（wp-content/plugins/ 下），源码副本（D:\Documents\sources\...）改了不生效（ls -i 判同否）；② form_submit 必须带页面全部 hidden（含 `_acf_objects`，否则 success=True 但对象不建）；③ change_form 用页面 JSON `"nonce":"..."`，form_submit 用 `_acf_nonce`；④ form_key 必须 `form_` 前缀才能走 load_data 完整路径
 - **★ 重放多步 AJAX 链的方法论铁律（2026-08-14 用户等不耐烦的血泪教训）**：第一步先完整复刻真实浏览器的请求（抓页面全部 hidden 字段原样带上 + 按端点选对 nonce），不要凭报告手搓部分参数逐步试错——`_acf_objects`、nonce 类型、form_key 前缀任一缺失都会造成"表单成功但没建对象"的假象，逐个排查极费时。用户明确嫌慢时，停下来说清已定位的坑 + 直接给完整脚本，别继续单参数试错
+- **Burp 手工重放打法（2026-08-14 用户偏好：像打真实站一样挂 Burp 改包自己过一遍，不要只给脚本）**：用户要求"挂 Burp 改包手工打"时，先备好 Burp（本机 D:\Pentest\burp202405，代理 127.0.0.1:8080）→ 浏览器挂代理 → 关 Intercept 访问页面让流量进 History → 从 History 提取 `_acf_form`/`_acf_nonce`/页面 JSON `"nonce"`/`_acf_objects`/`data-key` → 开 Intercept 手工改包发三请求。完整请求模板 + nonce 区分表 + URL 编码坑（块注释空格/引号/换行必须编码，Burp 选中后 Ctrl+U）见 `references/burp-manual-replay.md`。要点：change_form 用页面 JSON nonce（acf.data.nonce）、form_submit 用 `_acf_nonce`；验证看 Set-Cookie wordpress_logged_in_* 或数据库 wp_usermeta
 - 核心：WP 6.x + PHP 8 + 插件最新版；构造最小表单（admin_form post + acf-field posts）走真实渲染；未认证（无痕）跑 PoC
 - ACF 字段 post 结构：**post_name=字段key，post_excerpt=字段name，post_content=serialize(设置数组)**
 
