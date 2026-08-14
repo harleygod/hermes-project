@@ -233,6 +233,7 @@ metadata:
 ## 靶场复现（Windows/phpStudy）
 - 详细步骤/坑/表单构造：references/wp-lab-setup.md
 - **★ 重放 FEA 表单链前必读** wp-lab-setup.md 的"FEA 表单提交重放四大坑"：① 改插件代码必须改运行实例（wp-content/plugins/ 下），源码副本（D:\Documents\sources\...）改了不生效（ls -i 判同否）；② form_submit 必须带页面全部 hidden（含 `_acf_objects`，否则 success=True 但对象不建）；③ change_form 用页面 JSON `"nonce":"..."`，form_submit 用 `_acf_nonce`；④ form_key 必须 `form_` 前缀才能走 load_data 完整路径
+- **★ 重放多步 AJAX 链的方法论铁律（2026-08-14 用户等不耐烦的血泪教训）**：第一步先完整复刻真实浏览器的请求（抓页面全部 hidden 字段原样带上 + 按端点选对 nonce），不要凭报告手搓部分参数逐步试错——`_acf_objects`、nonce 类型、form_key 前缀任一缺失都会造成"表单成功但没建对象"的假象，逐个排查极费时。用户明确嫌慢时，停下来说清已定位的坑 + 直接给完整脚本，别继续单参数试错
 - 核心：WP 6.x + PHP 8 + 插件最新版；构造最小表单（admin_form post + acf-field posts）走真实渲染；未认证（无痕）跑 PoC
 - ACF 字段 post 结构：**post_name=字段key，post_excerpt=字段name，post_content=serialize(设置数组)**
 
