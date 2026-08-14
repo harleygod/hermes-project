@@ -1096,13 +1096,13 @@
     "created_at": "2026-08-05T08:02:57.978301+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-08-11T07:57:49.376799+00:00",
-    "last_used_at": "2026-08-11T07:57:12.099830+00:00",
-    "last_viewed_at": "2026-08-11T07:57:12.086246+00:00",
+    "last_used_at": "2026-08-14T10:03:38.824776+00:00",
+    "last_viewed_at": "2026-08-14T10:03:38.815249+00:00",
     "patch_count": 10,
     "pinned": false,
     "state": "active",
-    "use_count": 7,
-    "view_count": 7
+    "use_count": 9,
+    "view_count": 9
   },
   "vuln-intel-research": {
     "archived_at": null,
@@ -1290,27 +1290,27 @@
     "archived_at": null,
     "created_at": "2026-08-07T08:31:00.718893+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-14T08:11:58.014997+00:00",
-    "last_used_at": "2026-08-14T08:11:31.164337+00:00",
-    "last_viewed_at": "2026-08-14T08:11:31.153818+00:00",
-    "patch_count": 102,
+    "last_patched_at": "2026-08-14T10:08:59.491166+00:00",
+    "last_used_at": "2026-08-14T10:08:32.501561+00:00",
+    "last_viewed_at": "2026-08-14T10:08:32.489503+00:00",
+    "patch_count": 109,
     "pinned": false,
     "state": "active",
-    "use_count": 68,
-    "view_count": 68
+    "use_count": 73,
+    "view_count": 73
   },
   "wordpress-plugin-code-audit": {
     "archived_at": null,
     "created_at": "2026-08-06T09:58:36.361917+00:00",
     "created_by": "agent",
     "last_patched_at": null,
-    "last_used_at": "2026-08-07T03:01:29.360087+00:00",
-    "last_viewed_at": "2026-08-07T03:01:29.346424+00:00",
+    "last_used_at": "2026-08-14T10:12:40.593874+00:00",
+    "last_viewed_at": "2026-08-14T10:12:40.588841+00:00",
     "patch_count": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 1,
-    "view_count": 1
+    "use_count": 2,
+    "view_count": 2
   },
   "xlsx": {
     "archived_at": null,

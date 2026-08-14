@@ -86,6 +86,7 @@ metadata:
   - **触发面判定 = 谁能写 post_content**：block 属性漏洞先问"写 block 的人什么权限"——edit_posts=作者级 → 存储 XSS 作者级写 → 超 Wordfence 范围不交（即使访客触发）
   - 附带: 插件打包旧版 pdf.js（CVE-2024-4367 类）也属依赖漏洞不交
   - **zip 下载失败替代方案（实测）**：SVN tags 单文件拉取 `https://plugins.svn.wordpress.org/{slug}/tags/{ver}/{path}`——先 curl tags/ 拿版本列表 → 拉核心文件（主文件/admin/block.json/public.php/JS）。block 插件核心 3-5 个文件，比等 zip 快得多；修复前/后各拉一份 diff 即可
+- **PDF 生成类插件审计模式（dk-pdf 2.3.1，2026-08-14）**：\n  - 结构：`?pdf=<param>` query_var（未认证可触发）→ ContextManager 分派（数字=单篇上下文 / 非数字=archive 上下文）→ DocumentBuilder 用 mPDF 生成。文件操作集中在字体管理 AJAX（需登录）\n  - **单篇上下文权限分级（先查这个）**：can_user_read_post——`is_post_publicly_viewable` 放行 public；private 需 `read_private_posts` cap 或作者本人；draft/pending/future 需 `edit_post` cap。分级完整 = 无未认证读私有文章\n  - **archive 上下文查 post_status**：queryArchivePosts 若硬编码 `post_status => 'publish'` = 只查公开文章 = 无私有泄露；若用 'any'/空 = 未认证读私有候选\n  - **模板加载 = 文件读取面**：TemplateRenderer 模板名是否硬编码（dkpdf-index 等）→ 硬编码 = 无文件读取；若模板名来自用户输入/option 且无后缀白名单 = 任意文件读取候选（PDF 插件经典洞）\n  - **SSRF 修复点**：sanitizeContent 里 isUrlAllowed 类 URL 过滤（img src/CSS url()）→ 但 SSRF 本身 Wordfence out-of-scope，别花时间\n  - **重构后查 XSS 回归**：旧版修过 Reflected XSS（1.9.7）→ 2.0 大重构后重查短代码/模板输出是否全转义\n  - 判定：PDF 类插件核心风险 = 模板名可控性（文件读取）+ archive 查询状态（私有泄露）+ 单篇权限分级；三面都硬 = 防护质量高，放弃（dk-pdf 三面全硬）
 
 ### 看更新日志（changelog 攻防信号）
 - wordpress.org 插件页 → "Development" tab → Changelog
@@ -121,6 +122,21 @@ metadata:
 - **报告里的"已验证安全"栏往往是最可信的亮点**（realpath/白名单校验真实存在）；盲区清单（shortcode XSS/第三方集成回调/Elementor 渲染等未覆盖面）是继续挖的现成地图
 - 验证记录范式见 `references/everest-forms-report-verification.md`
 - **盲区深挖实战结论（Everest 案例后半段）**：验证完报告后按盲区清单继续挖——shortcode 渲染 XSS（转义完整）、成功页 entry_id（HMAC）、集成回调（权限双挡）三面全干净 → **防护质量高的现代插件（全面 escaping + HMAC + realpath 校验）盲区也大概率干净，挖 2-3 面即止别恋战**。表单类插件可复用检查点：① 提交后确认页 `?entry_id=` 回显 = hash 是否 wp_hash HMAC 签名（签名=安全，base64 裸值=IDOR）；② 字段 POST 回填值 XSS = 追 `$defaults → properties['attr']['value'] → 最终输出函数`（evf_html_attributes 全 esc_attr / textarea sanitize+esc_html = 干净）
+
+## 赏金中心框架（2026-08-14 用户明确：一切围绕可交成果）
+- **中心 = 收录范围，不是漏洞分类**：用户原话"我只想要最后有成果""你要围着收录的范围挖"。分类学只是工具，装量门槛是第一层。用户会质疑分类框架（"真的就这5类吗"/"不是我说啥你就回啥"）——独立系统思考给完整版，但最终收敛以"能交赏金"为中心，别停留在学术分类
+- **四层倒金字塔（顺序不可反）**：
+  1. 装量定门槛（硬过滤）：<25装→仅High Threat；25-500→High Threat；500-50k→High Threat+SQLi+StoredXSS；>50k→全类型。1k-10k 装插件上信息泄露/IDOR/任意删除/CSRF 全超范围白审
+  2. 类型定价值：金矿=RCE/提权到Admin/认证绕过到Admin/任意PHP文件操作/Options Update(25装门槛)；银矿=SQLi/StoredXSS(500装)；铜矿=泄露/IDOR/删除/CSRF(需50k+装)。ChainQ=金矿第一梯队(未认证→提权到Admin)
+  3. 成因×打法（怎么挖）：10类成因×8条动作×WP载体矩阵见 references/audit-framework-and-hunting-paths.md
+  4. 终审过滤器：业务逻辑/SSRF/OpenRedirect/私有内容/作者级/配置依赖/nonce完整/依赖CVE → 一票否决
+- **插件类型→金矿映射表（选目标直接查）**：文件上传/管理→任意文件上传RCE→自写文件逻辑+TOCTOU；表单引擎/CRUD→提权到Admin→配置来源追踪(ChainQ模式)；权限/会员→认证绕过到Admin→绕过面枚举(REST/XML-RPC/feed/cron)；密码重置/登录→认证绕过到Admin→重置逻辑+随机性+令牌空间；下载/备份→任意文件读取/删除→路径来源+realpath+可枚举性；Options/设置→Arbitrary Options Update→权限对照；搜索/查询→SQLi(银矿)→数据流+semgrep；短代码/输出→StoredXSS(银矿)→输出追踪
+- **候选池可交性审计（投入前必做，2026-08-14）**：候选目标先过三关——装量档位×类型映射金矿面×维护年龄，三关不过直接划掉。补丁分析池=银矿/铜矿池（"修过洞"插件产出漏修/绕过型），金矿在配置驱动表单引擎+远古文件操作类。实战：候选池剩余5个只有 dk-pdf(3000装, PDF+SSRF修复→文件读取面) 和 attachments(8000装, 附件管理=金矿类型) 值得审；pdf-forms-for-CF7(130天活跃)/upload-larger-plugins(admin功能)/canonical-attachments(300装<500) 划掉
+- **★ 补丁分析池正式退役（2026-08-14 审完最后2个，全军覆没）**：dk-pdf(3000装, 模块化PDF插件) 防护质量高——PDF入口query_var有权限分级(can_user_read_post: public放行/private需cap或作者/draft需edit)、archive查询post_status='publish'硬编码(无私有泄露)、模板名硬编码(dkpdf-index等, 无用户输入→无文件读取)、短代码全sanitize、SSRF已修(超范围)；attachments(8000装, 纯后台meta box) 无nopriv/无AJAX/无短代码+save()三件套齐全(登录+nonce+edit_post)+unserialize数据源是管理员写的post meta→攻击面≈0。**结论：补丁分析池（changelog安全词筛出的"修过洞"插件）作者有安全意识、防护普遍到位，10+连审0可交，正式退役；转投金矿池（表单引擎筛选器 ChainQ模式 + 远古文件操作类）**
+- **★ 表单引擎金矿池首轮实战（2026-08-14，筛选器 `scripts/wp_filter_formengine.py`）**：307 候选 → 40 个 150天+未更新。优先画像=配置驱动表单引擎 × 未认证面 × 老代码。首轮审 4 个：
+  - **front-end-pm（4000装/548天，前端私信系统）→ 放弃**：REST 6路由全 permission_callback(fep_current_user_can('access_message'))；附件下载端点(fep_id/fep_parent_id+readfile)双层校验(access_message + view_message 查参与者归属 + att_status publish 检查)；AJAX 全 nonce+admin(fep_is_user_admin)。**前端CRUD/私信插件审计顺序**：REST路由逐个看 permission_callback → 附件/文件端点查归属校验(操作对象 vs 权限判定对象) → AJAX 查 nonce+capability。权限模型扎实=放弃，记入"待绕过池"（NVD 查 CVE 后可回来找绕过）
+  - **buddyforms（900装/436天，前端表单构建器）→ ★深挖中（最像 ChainQ）**：攻击面全 nopriv——`buddyforms_ajax_process_edit_post`(前端编辑文章, parse_str 解析 POST['data'] → buddyforms_process_submission 配置驱动提交链)、`handle_dropped_media`/`handle_deleted_media`(上传/删除)、`upload_image_from_url`(远程图片下载=文件写面)、`buddyforms_gdpr_data_request`(PII面)、多处 `file_put_contents(bf-global-{js,css}-$form_slug.{js,css})`(form_slug 来自 POST!)。**权限模型疑点**：bf_user_can 用动态 capability `buddyforms_{form_slug}_create`，form_slug 是 POST 可控 → 攻击者可从管理员建的表单池里"挑配置用"（ChainQ 变体：不伪造配置但选择配置）。深挖重点：process_submission 的 form_slug 可控后 post_type/status/author/meta 哪些能打、upload_image_from_url 文件写、file_put_contents 的 form_slug 路径可控性（.js/.css 后缀可能限死）、GDPR 端点
+- **六路并行挖洞思路（2026-08-14 定，按优先级）**：A ChainQ复制=表单引擎筛选器(25-50k装×表单/CRUD/前端提交×150天+未更) → B 远古文件操作(1k-5k装×文件操作×3-5年未更) → C 补丁分析清剩余候选(现成) → D SQLi/XSS面(10k-50k大插件, semgrep现成) → E 认证面(密码重置/登录/会员) → F 0day竞速(新插件破零练手)。详表见 references/audit-framework-and-hunting-paths.md
 
 ## 漏洞价值三层评估（决定交不交）每个洞按三层逐步降级，三层全过才算硬洞，**任何一层失败就果断放弃或降级提交**：
 1. **源码机制成立**（静态）：代码层面缺陷存在（nopriv 端点/权限缺失/令牌铸造）
