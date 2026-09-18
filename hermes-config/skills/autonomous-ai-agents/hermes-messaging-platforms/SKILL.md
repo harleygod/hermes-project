@@ -55,6 +55,45 @@ WARNING gateway.run: Unauthorized user: o9cq8...@im.wechat (...) on weixin
 - **坑：list 显示存在但 approve 报 "Code not found or expired"** —— pending.json 里 legacy 明文格式条目被 approve_code 静默忽略（只认 salt+hash 条目）。处理：`hermes pairing clear-pending` 清掉，让用户微信重发消息触发新码；或直接依赖白名单放行（白名单用户无需配对）
 - 用户转述的配对码可能不准（如说 "JG" 实际是别的），以 `hermes pairing list` 的 pending 码为准
 
+## 排障：连不上/发不出（2026-09 实测）
+
+### 1. gateway 没在跑（最常见）
+症状：微信里发消息没反应。`gateway_state.json` 里写着 `"gateway_state":"running"` 也是**过期数据**——它不随进程退出更新。
+```bash
+hermes gateway status    # 会明确报 "✗ Gateway is not running" + "Stale gateway_state.json"
+hermes gateway run       # 前台/后台起（本会话 background=true）
+hermes gateway install   # 装 Windows 计划任务，开机自启（否则关了终端就断）
+```
+判断凭证是否还有效（不用重启 gateway）：
+```bash
+# POST https://ilinkai.weixin.qq.com/ilink/bot/getconfig
+# headers: AuthorizationType: ilink_bot_token / Authorization: Bearer <WEIXIN_TOKEN>
+# body: {"ilink_user_id": "<WEIXIN_ALLOWED_USERS>"}
+# → {"ret":0,"typing_ticket":"..."} = token 有效
+```
+真连上的日志特征：`✓ weixin connected` + `[Weixin] Connected account=... base=https://ilinkai.weixin.qq.com`
+
+### 2. `hermes send --to weixin:<dm_id>` 解析失败（实测坑）
+微信 DM id 形如 `o9cq801...@im.wechat`，但 `_WEIXIN_TARGET_RE`（tools/send_message_tool.py:36）只认
+`wxid_/gh_/v1_/wm_/wb_` 前缀、`*@chatroom`、`filehelper` → DM id 匹配失败 → chat_id 为空 → 报
+`No home channel set for weixin ...`（**误导性报错，别去查 token**）。
+解法：在 .env 加 `WEIXIN_HOME_CHANNEL=<dm_id>`，然后裸平台名发送：
+```bash
+printf 'WEIXIN_HOME_CHANNEL=o9cq...@im.wechat\n' >> ~/AppData/Local/hermes/.env
+hermes send --to weixin "文本"
+```
+
+### 3. 主动发消息被 iLink 限流（ret/errcode -2）
+症状：`Weixin send failed: iLink sendmessage rate limited; cooldown active for 30.0s`
+（30.0s = 适配器本地熔断刚打开，不是服务端让你等 30s）。根因通常是**未经用户先说话的主动外发**（腾讯侧频率/会话限制），
+不是配置错误。正常会话流（用户先发消息 → agent 回复）不受影响。
+排查时别连发刷接口，会持续触发熔断：`_rate_limit_circuit_threshold` 次命中即熔断 `_rate_limit_circuit_open_seconds`。
+
+### 4. `getaddrinfo failed` 间歇性 DNS 失败
+长轮询日志偶发 `[Weixin] poll error (n/3): Cannot connect to host ilinkai.weixin.qq.com:443 ssl:default [getaddrinfo failed]`。
+`nslookup ilinkai.weixin.qq.com` 正常解析（CNAME → aewebpodproxy.weixin.qq.com，多个 IP）说明是本机 DNS 抖动，
+适配器 3 次重试后会自愈，无需处理。8月那次连续刷屏才是真断网。
+
 ## 凭证有效性验证（token 失效排查）
 调 iLink `ilink/bot/getconfig`（POST，headers: `AuthorizationType: ilink_bot_token` + `Authorization: Bearer <token>`，body: `{"ilink_user_id": <user_id>}`），返回 `ret: 0` 即 token 有效（响应含 typing_ticket）。
 
