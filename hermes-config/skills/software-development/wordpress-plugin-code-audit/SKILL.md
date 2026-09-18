@@ -69,6 +69,26 @@ if ( ! current_user_can('edit_post', $id) && ! $allowed_by_settings ) { die; }
 - `parse_blocks(post_content)` 递归匹配块 attrs → 若 post_content 可控（no_kses 通道）可定义任意字段（name/type）
 - 配合 meta 直写：`acf_update_metadata($post_id, $field['name'], $value)` 字段 name 直接当 meta 键、无保护键名单 → `wp_capabilities` 等敏感 user meta 可覆盖 → 提权
 
+### 11. 注册/用户创建链（form 类插件）
+基于 BuddyForms 2.9.0 审计实践（证据图见 `references/buddyforms-registration-chain.md`）：
+- **判据先行**：敏感值（角色 / meta 键 / 目标 user_id）先分清"POST 可控"（P0/P1）还是"表单配置可控"（管理员建表单/字段才成立 → 配置依赖，标 P2 不编造 P0）。角色来源三选一：POST 直读 / `$buddyforms[$form_slug]['registration']['new_user_role']` 类配置 / 固定 subscriber
+- **权限门禁与注册分支的相对位置**：registration 分支常位于 bf_user_can / who_can_see 检查**之前** → 渲染端权限不覆盖提交端；未认证门槛往往仅 = users_can_register + nonce + honeypot + 必填校验
+- **共享 nonce action**：全站表单同一 action（如 buddyforms_form_nonce）+ `wp_nonce_field` 输出于每个前端表单页 → 任意公开页可提取，未认证可提交任意 form_slug；nopriv AJAX 提交路径（`parse_str($_POST['data'])`）字段全可控
+- **激活链 = 自动登录点**：template_redirect 上 key（user meta）+ user + nonce 验证后 `wp_set_current_user` + `wp_set_auth_cookie`；key 只发邮箱 → 仅自己账户可激活（跨用户需猜 key，不成立）；自定义 nonce（如 buddyforms_create_nonce）按 user_id 锚定 + `nonce_user_logged_out` 过滤器 → 无法为他人 uid 铸造
+- **user meta 写入链**：注册成功后遍历 form_fields 调 update_user_meta，键=字段 slug（配置）、值=POST、sanitize_text_field 不破坏序列化串 → wp_capabilities 覆盖仅配置依赖；写入侧常无黑名单（avoid 列表只用于读取展示，别误判为写入防护）
+- **改密端点**：`global $user_ID` = 当前登录用户 → 天然自服务（无旧密码校验是 WP 常态）；非 safe 的 `wp_redirect` + 注册时 POST 可控 user meta 跳转 = 开放重定向（Wordfence 排除，仅记录）
+- **admin_action_* 缺 capability 检查**：若 nonce 仅渲染在 admin 界面则实际不可利用，标边际/记录而非 P1
+
+### 12. 文件操作类端点（上传/远程下载写/删除/写文件点）——BuddyForms 2.9.0 提炼
+- **nopriv 上传端点先分清三道门**：nonce（是否公开输出）、权限检查（bf_user_can/public_submit 类配置放行）、WP 层 MIME 白名单（media_handle_upload → wp_check_filetype_and_ext 挡 php）。三道全过才成立；nonce 经 `wp_localize_script` 的 ajaxnonce 字段输出 = 公开，不算防护
+- **sanitize_text_field 保留 `../` 和 `/`** → 文件名/路径拼接前先查它；`wp_upload_bits` 内部 `$upload['path'] . '/' . $filename` 直接拼接、wp_unique_filename 不清理穿越 → 可写 uploads 目录外
+- **强制扩展名后缀是 RCE 死穴**：`$file_id . '.png'` 固定后缀 → 即使内容可控（getimagesize 只验图片头 mime、accepted_files 参数攻击者可控、可带 GIF89a 头+payload）也无法直接 RCE → 定级"受限扩展名任意写 + SSRF"，别报成可 RCE 的任意文件上传
+- **file_put_contents 写点先找配置键约束**：文件名里的变量若必须匹配已注册配置键（如 `isset($buddyforms[$form_slug])` 查找）→ 穿越被约束挡住，负向结论要写明排除理由，不报
+- **`parse_str($_POST['data'])` + `$_POST = $form_data`**（form 类插件 AJAX 提交常见形态）→ post_id/form_action/status 全可控；配 public_submit 表单 + `if ( is_user_logged_in() )` 分支跳过 post_type 检查 → 未认证任意 post_id 内容覆盖
+- **human/GDPR 验证的 key 渲染进 HTML 隐藏字段 = 可绕过**（如 N000M 两数拼接，读页面自算答案）；这类端点按滥用定级（邮件轰炸）不按数据泄露
+- **删除端点看归属校验**：`$post->post_author == $current_user->ID` 对未认证（ID=0）只剩 author=0 对象可删 → 通常不可利用，标负向
+- 详细端点级证据（BuddyForms 7 个 nopriv 逐条结论）→ 见 `references/buddyforms-file-ops-ajax.md`
+
 ## 捆绑代码
 - 插件常捆绑完整 ACF 副本（custom-fields/）和 SDK（freemius/）→ 审计时排除 vendor 类目录，聚焦自有代码
 - 但捆绑 ACF 的 acf_update_value / acf_update_metadata 是漏洞链执行点，必须跟踪

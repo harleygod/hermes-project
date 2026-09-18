@@ -1,6 +1,6 @@
 ---
 name: vuln-intel-research
-description: 查漏洞是否公开/有无公开POC，未公开则分析并写探测POC，收录武器库。
+description: 查漏洞是否公开/有无公开POC，未公开则分析并写探测POC，收录武器库。0day载荷反推版本见 payload-version-inference。
 ---
 
 # 漏洞情报检索与 POC 收录
@@ -55,11 +55,29 @@ description: 查漏洞是否公开/有无公开POC，未公开则分析并写探
 ## 闭源组件考古
 新版组件源码闭源（GitHub 只有 example、Maven sources 空壳）时，用二进制 jar + javap 反编译确认接口路径/参数/危险调用链——完整命令集见 `references/closed-source-jar-forensics.md`（阿里云 Maven 镜像直连、字节码定位 AviatorEvaluator.execute、grep -rla 二进制定位类等实战技巧）。
 
+## 0day 载荷反推目标版本（payload-side version inference）
+手上有武器化 0day 载荷（序列化流/恶意 class/exploit 脚本）但无版本信息时，反推目标版本以定向找源码/定影响范围：
+- 反编译恶意 class（javap -p -c -verbose）：JDK 内部 API（sun.misc.BASE64Decoder→JDK≤8，java.util.Base64→JDK8+）、class 文件 major（51=Java7/52=Java8）、反射假设（Class.forName 拿 CodeSource→目标 lib 必有某 jar）、写马路径→部署布局（ROOT/WEB-INF）
+- 解析序列化流提取链类名（scripts/java-serialization-classnames.py）：包名判别依赖版本线（org.apache.commons.collections=cc3.x vs collections4=cc4.x）；SUID 区分小版本价值低，别完整解码流
+- 约束映射产品版本历史表 → 命中/排除/待测三档；公网混合版本全 404 只证明组件隐蔽/特定版本，A/B 假设并列
+- 输出：版本排序 + 源码检索顺序（按可得性）+ 拿源码后的 grep 验证命令 + 决定性信息缺口（问源头验证环境版本号）
+完整方法论 + 泛微 e-cology 版本历史映射（dispatch 0day 案例）见 `references/payload-version-inference.md`
+
 ## 表达式注入/命令执行类漏洞分析要点
 - 参数名暗示引擎类型：`expressSql` 类 → 公式转 SQL 或表达式引擎求值
 - Java 引擎指纹表：JEXL（`${}`/`''.getClass().forName(...)`）、QLExpress（方法链）、SpEL（`T(...)`）、OGNL（`@类@方法()`）、自研公式→SQL（退化 SQLi）
 - 已知利用链特征：**引擎支持反射方法调用 + Thread 上下文 ClassLoader.defineClass(字节码字符串) = 内存马注入**（无文件落地）。识别到反射调用能力即可预判内存马注入链
 - 内存马注入是写操作：POC 不内置注入载荷，文档说明利用链，实际利用需人工构造字节码+授权确认
+
+## 0day 武器化成 nuclei 探测模板（批量资产识别路线）
+用户说"武器化 / 加进 nuclei / 拿去扫一批资产识别存在性"时走这条路线（区别于单点 Python POC）：
+- **铁律**：模板只读（空载荷探测，绝不内置 RCE/写马载荷，0day 载荷只进本地 exploit 脚本）；severity 按真实危害（入口=RCE 给 critical）；matcher-name 语义化（version-e8 / dispatch-interface 可筛可读）；双路径变体（ROOT + /ecology/ 上下文）
+- **指纹必须实测校准**：先 curl 真实目标确认标记位置再写 matcher。泛微：版本标记在 /wui/index.html 的 `/js/ecologyN` 与 `theme/ecologyN`（不在根路径）；**e-cology 8.2+ 也有 wui 前端**，8 与 9/10 不能靠 wui 区分
+- **防误报**：禁 `status negative:[404]` 判接口存在（请求失败时状态码 0 → 误判命中），用 dsl `status != 404 && status >= 200 && status <= 599`；WAF/云防护统一拦截页（403/405/504/200 对任意路径同码）单请求模板防不住 → 命中后必须基线复核
+- **批量流程**：FOFA 拉资产 → `nuclei -l urls.txt -c 25 -silent -jsonl -o result.jsonl` → parse 汇总 → verify 基线复核 → 授权目标才进 exploit
+- **工具已就位**：`D:\Pentest\攻防\武器库\nuclei-templates\`（README 规范 + parse_nuclei_jsonl.py + verify_dispatch_hits.py + weaver\ecology-dispatch-invoke-probe.yaml 范例）；nuclei 3.4.2 在 `D:\Pentest\攻防\nuclei_3.4.2_windows_amd64\`
+- nuclei v3 DSL 坑：`response_1.status_code` 报 "Unable to access unexported field" → 用 status/word matcher 或 v2 风格 body_N；git-bash 跑 nuclei.exe 必须反斜杠原生路径（/d/ 会被 MSYS 转换）
+- 完整流程 + 模板 v1→v2 演进 + 91 条误报复盘见 `references/nuclei-template-weaponization.md`
 
 ## POC 编写规范（防误报三原则）
 1. **失败短路**：连接失败(-1/-2)/404/403/405 直接返回，不做任何引擎判定（异常文本里的数字会触发误判）
@@ -83,6 +101,10 @@ POC 交付验证规范：验证脚本放 Temp 跑完即删会产生"无证据的
 **mock 验证 ≠ 真实环境验证（用户明确纠正过："没在靶场测试，咋知道 POC 成功了"）**。mock 只证明 POC 对理想响应的判定逻辑正确，证明不了漏洞在真实环境可触发。真实环境可能哑火的不确定点：模板引擎对多参方法调用的参数适配（FreeMarker BeansWrapper 类型转换，如 compute(List,Object,String) 三参）、渲染链在目标版本是否保留（老链路可能被重构）、渲染 Map 变量名是否命中探测列表、结果是否回显在接口响应。交付标准 = mock 全分支绿 **+ 真实环境端到端验证**（本机 docker/vulhub 靶场，或授权目标只读探测）；暂无靶场/目标时，交付说明里必须明确标注"仅逻辑级验证，未真实环境验证"并列出待验证点，不要默认 POC 已可用。
 
 ## Pitfalls
+- **"实战打过但 URL 忘了"的 POC, URL 是重建猜测值**: 别拿未验证的重建 URL 当 ground truth 扫影响面——全 404 只证明"路径不存在", 会误导出"影响面≈0"。先证明入口对(已知-good 目标/源码 servlet 映射)再谈影响面。入口路径不匹配产品原生 API 前缀时优先判"二开/集成模块"(详见 references/payload-version-inference.md 案例结论: 泛微 /dispatch/ 不匹配原生前缀 → 疑似二开集成模块, 影响面=特定客户非所有部署, 真 URL 需回问 POC 提供者)
+- **nuclei 接口存在性判定禁 `status negative: [404]`**：请求失败（超时/连接重置/DNS 解析失败）时状态码为 0，negative-404 会把 0 误判为命中（实测 91 条假阳性）。改 dsl `status != 404 && status >= 200 && status <= 599`；WAF 统一拦截页（403/405/504/200"访问禁止"）对任意路径同码仍会命中，需基线复核脚本（真实路径 vs 同前缀假路径 vs 随机路径状态码对比）筛掉
+- **nuclei v3 DSL 无 `response_N.status_code`**：报 "Unable to access unexported field 'status_code'"；官方模板（v10.x）不用 req-condition，用 status/word matcher 或 v2 风格 body_N/status_N
+- **Windows 程序吃 MSYS 路径**：git-bash 跑 nuclei.exe 传 `/d/...` 会被转成 `C:\Users\...\nuclei-templates\d\Pentest\...` 报 file not found；一律用反斜杠原生路径 `'D:\...'`（python 脚本同样）
 - **闭源 jar 源码考古**：Maven Central 的 -sources.jar 可能是空壳(仅 README)，但二进制 jar 完整。用阿里云镜像秒下(https://maven.aliyun.com/repository/central/...，直连快于 repo1+Clash)，unzip 后 javap -c -p -l 反编译：字节码 invoke 行能看到危险调用(AviatorEvaluator.execute 等)，-v 看注解映射/常量池(接口路径、共享变量名、.ftl 模板路径)。Spring 控制器类常被混淆成 a/b/m 单字母类
 - **Python str.format 与 FreeMarker 模板冲突**：模板含 `${...}` 时 .format() 报 "unexpected '{'"，用 .replace() 做占位符替换
 - **Windows 上 isatty() 不可靠**：`sys.stdin.isatty()` 对 subprocess DEVNULL/NUL 句柄实测返回 True，不能用于判定交互性。交互确认改用 `input()` + 捕获 `EOFError`（非交互时 input 抛 EOFError → 拒绝），并可测试：非 tty 场景 stdin=DEVNULL 跑 CLI 应打印"拒绝"且无执行输出
