@@ -39,7 +39,8 @@ version: 1.0.0
 ```bash
 # .env 追加（用打码验证）
 grep WEIXIN_ACCOUNT_ID .env | sed 's/=.*/=***/'
-# gateway 重启后 hermes doctor 应显示平台在线；平台列表 hermes platforms
+# gateway 重启后 hermes gateway status 应显示 running；日志出现 ✓ weixin connected 即在线
+# 注意：`hermes platforms` 这个命令**不存在**（2026-09-18 实测报 invalid choice），别照抄
 ```
 
 ## 接入后必配：白名单（不配 = 全拒）
@@ -83,19 +84,71 @@ printf 'WEIXIN_HOME_CHANNEL=o9cq...@im.wechat\n' >> ~/AppData/Local/hermes/.env
 hermes send --to weixin "文本"
 ```
 
-### 3. 主动发消息被 iLink 限流（ret/errcode -2）
-症状：`Weixin send failed: iLink sendmessage rate limited; cooldown active for 30.0s`
-（30.0s = 适配器本地熔断刚打开，不是服务端让你等 30s）。根因通常是**未经用户先说话的主动外发**（腾讯侧频率/会话限制），
-不是配置错误。正常会话流（用户先发消息 → agent 回复）不受影响。
+### 3. 主动发消息被 iLink 限流（ret/errcode -2）——**这是硬机制，不是配置错，别浪费时间重试**
+症状：`hermes send --to weixin "..."` → `Weixin send failed: iLink sendmessage rate limited; cooldown active for 30.0s`
+（30.0s = 适配器本地熔断刚打开，不是服务端让你等 30s）。
+**实测结论（2026-09-18）：个人号 bot 不能主动发起会话。** 用户最后一次说话隔了 1 个多月后，
+连续两次主动外发（间隔 35s）都是同一个 rate limited —— 等冷却没用，重启 gateway 也没用。
+真正的门是**会话窗口**：必须用户在微信里先发第一句，bot 才能在该会话内回复。
 排查时别连发刷接口，会持续触发熔断：`_rate_limit_circuit_threshold` 次命中即熔断 `_rate_limit_circuit_open_seconds`。
 
-### 4. `getaddrinfo failed` 间歇性 DNS 失败
-长轮询日志偶发 `[Weixin] poll error (n/3): Cannot connect to host ilinkai.weixin.qq.com:443 ssl:default [getaddrinfo failed]`。
-`nslookup ilinkai.weixin.qq.com` 正常解析（CNAME → aewebpodproxy.weixin.qq.com，多个 IP）说明是本机 DNS 抖动，
-适配器 3 次重试后会自愈，无需处理。8月那次连续刷屏才是真断网。
+**"用户找不到微信里跟 bot 的会话"怎么办**（2026-09-18 踩到）：
+- bot 不能在微信里主动弹消息，所以无法"发一条把他叫过来"，只能靠他翻到那个会话
+- 最有效：让他在**微信顶部搜索框**搜上次对话里的独特词（从 `logs/gateway.log` 的
+  `inbound message: platform=weixin ... msg='...'` 里捞他历史说过的话，挑个特征词给他去搜），
+  搜索结果点"聊天记录"即可直达该会话
+- 备选：聊天列表翻到对应日期；通讯录里找（iLink bot 以联系人形态存在）
+- 会话 ID 可从 `channel_directory.json` 或 `weixin/accounts/<account_id>@im.bot.context-tokens.json` 的 key 拿到
+  （形如 `o9cq801...@im.wechat`，是用户维度 DM id，**不是**给他看的入口）
+- 彻底删了会话/找不到 → 才需要重扫码（走上面的 QR 流程），此时凭证会换新
 
-## 凭证有效性验证（token 失效排查）
+### 4. `getaddrinfo failed` 持续刷屏 = gateway 进程内部 resolver 烂了，重启进程（2026-09-18 实测修正）
+症状：日志每 30s 一轮刷 `[Weixin] poll error (1-3/3): Cannot connect to host ilinkai.weixin.qq.com:443 ssl:default [getaddrinfo failed]`，
+偶夹 `[WinError 1236] 由本地系统中止网络连接`。**微信端表现 = 发消息没反应、也不回**（容易误判成"token 失效要重新扫码"）。
+
+判别（30 秒内做完，别急着重扫）：
+```bash
+# 1) 旁边新起进程测同一域名：能解析+能 TLS 就是网关进程的问题，不是网络
+python -c "import socket,ssl;s=socket.create_connection(('ilinkai.weixin.qq.com',443),timeout=8);print(ssl.create_default_context().wrap_socket(s,server_hostname='ilinkai.weixin.qq.com').version())"
+# 2) 看 gateway 进程已跑多久
+cat gateway.pid   # {"pid":...,"start_time":...}；powershell Get-Process -Id <pid> 看 StartTime
+```
+**根因：gateway 长跑（实测 27h+）后 asyncio 的该 resolver 状态失效**，进程内解析全挂，外部网络一切正常。
+→ 解法：`hermes gateway stop && hermes gateway run`（凭证不用动、不用重扫码）。
+修复成功特征：`gateway.run: Connecting to weixin...` → `[Weixin] Connected account=... base=https://ilinkai.weixin.qq.com` → `✓ weixin connected`。
+
+**别踩的坑**：skill 旧版写"是本机 DNS 抖动、3 次重试会自愈、无需处理"——错。只有零星一两次才叫抖动；
+连续多轮（间隔 30s 反复出现）就是进程坏了，干等不会好，必须重启。判断是否还在刷：`tail -3 logs/gateway.log` 看时间戳是否比当前时间新。
+
+预防：gateway 别长跑，或者 `hermes gateway install` 装计划任务（顺带解决"关终端就断"）。
+
+## 凭证有效性验证（token 失效排查）——`getconfig ret:0` **不足以**判定可用
 调 iLink `ilink/bot/getconfig`（POST，headers: `AuthorizationType: ilink_bot_token` + `Authorization: Bearer <token>`，body: `{"ilink_user_id": <user_id>}`），返回 `ret: 0` 即 token 有效（响应含 typing_ticket）。
+
+**重要修正（2026-09-19 实测）**：`getconfig ret:0` 只证明 token 通过了配置层校验，**不代表收消息的长轮询 session 还活着**。
+当天实测：getconfig 返回 ret:0，但旧凭证实际已死，重启 gateway 后 8 分钟就打出
+`ERROR gateway.platforms.weixin: [Weixin] Session expired; pausing for 10 minutes`，微信端发消息照样没反应。
+
+**判断要不要重扫码的决策树**：
+1. 日志刷 `getaddrinfo failed` / `WinError 1236` → 进程 resolver 坏，先重启 gateway（见下面第 4 条）
+2. 重启后出现 `✓ weixin connected` 但随后 `Session expired` → **token 层面已失效，必须重扫码**，重启多少次都没用
+3. 能收到 `inbound message: platform=weixin ...` → 通道真的活着，别动
+**唯一可靠的"活着"证据 = 日志出现 inbound（用户消息进来）。** 只要没 inbound，就不要拿 getconfig 的 ret:0 当通关凭证。
+
+## 重扫码后的善后（2026-09-19 实测，必做）
+重扫码会下发**新的 `ilink_bot_id`**（实测 `f8fb89567e0d@im.bot` → `40b280a5a0b0@im.bot`），**旧的作废**。.env 要改两个：
+- `WEIXIN_ACCOUNT_ID` = 新的 `ilink_bot_id`
+- `WEIXIN_TOKEN` = 新的 `bot_token`（完整串，形如 `<account_id>@im.bot:<32位hex>`，长度约 58）
+`WEIXIN_ALLOWED_USERS` / `WEIXIN_HOME_CHANNEL` **不用改**：`ilink_user_id` 是用户维度，同一个微信号重扫不变（实测恒为 `o9cq801KnpnIQYKNKvjVAIabGfMY@im.wechat`）。
+改完必须重启 gateway 才生效。改 .env 前先备份：`shutil.copy2` 到 `.env.bak.<时间戳>`；验证时打码输出（`v[:12]...v[-6:]`）别把 token 明文打到聊天里。
+
+成功特征（三条齐了才算通）：
+```
+gateway.run: Connecting to weixin...
+[Weixin] Connected account=<新 account 前8位> base=https://ilinkai.weixin.qq.com
+gateway.run: ✓ weixin connected
+```
+然后**让用户在微信里发一句话**，日志出现 `inbound from=...` 才算真通（bot 不能主动发起会话，见下面第 3 条）。
 
 ## Pitfalls
 - **二维码短效**：链接复制太慢必过期。生成 PNG 弹屏（qrcode.QRCode + os.startfile）让用户手机扫，全程 <10s

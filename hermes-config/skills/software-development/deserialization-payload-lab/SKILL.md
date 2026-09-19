@@ -20,6 +20,26 @@ description: "Java反序列化载荷本地验证靶机: 端到端测链/写马, 
 5. 发原始载荷 → `ls webroot/static/` 检查写马落盘 → 判定成功
 6. 复刻到 ASCII 路径再完整闭环一次(中文路径下验证结果会被路径坑污染)
 
+## 防护机制验证: 必须有「反证组」(方法论铁律)
+
+靶机不只用来验证载荷「能响」, 也用来验证防护机制(白名单/黑名单/类过滤)**是否真的拦得住**。
+验证防护时**单靠「通过」组会得出错误结论** —— 必须同时有预期被拒绝的反证组:
+
+- 正证组: 预期被放行的载荷 → 记录实际返回
+- **反证组: 预期被拒绝/降级的载荷 → 记录实际返回** (如 hessian 白名单把非白名单类静默降级成 `HashMap`,
+  返回 `.getClass().getName()` 就是判定依据, 不用只看异常)
+- 只有「通过」组、没有「拒绝」组的实验结论**不可采信**, 也不该报给用户
+
+实测教训: 曾有载荷未被拦截就被推断成「内置 deserializer 绕过白名单」并作为唯一缺口上报,
+补做反证组后才定位真因是库的**静态白名单按包名放行**(`java\..+` 放行全部 `java.*`) —— 与"绕过了什么机制"完全无关。
+选择反证组时注意**排除掉会被静态规则放行的包名**, 否则反证组自己也会"通过", 反而强化误判。
+
+**构包端副作用与目标端副作用必须可区分**: 载荷里若含会触发静态块/联网的类,
+构建 payload 的那个 JVM 会先触发一次, 导致「靶机没打中也看到副作用」的假阳性。
+做法: 探测类 static 块读 `-Dprobe.tag=GEN|LAB` 并把它写进标记文件, 构包用 `-Dprobe.tag=GEN`、
+靶机用 `-Dprobe.tag=LAB`, 一眼分辨是谁触发的。判「某机制是否触发」**必须用探针实测**(static 块写文件、
+DNS 出网、写马落盘), 不能只看参数/字节码推断。
+
 ## 坑(全部实测)
 - **中文路径 → 写马错位**: `CodeSource.getLocation().getPath()` 返回 URL 编码路径(`%e6%94%bb...`), 恶意类静态块无 URLDecoder → 写到字面 `%xx` 目录(如 D:\Pentest\%e6%94%bb...)。真实目标标准部署(如 C:\Resin\webapps\ROOT)是 ASCII 不受影响, 但中文路径定制部署会写错位置
 - **beanutils BeanComparator 丢 cause**: 1.9.4 源码 `throw new RuntimeException("InvocationTargetException: " + ite.toString())` — 异常链断裂, 反序列化器只见 RuntimeException。绕过: 直接反射 `TemplatesImpl.class.getMethod("getOutputProperties").invoke(t)` → catch InvocationTargetException → `getTargetException()` 拿真实异常
@@ -30,3 +50,7 @@ description: "Java反序列化载荷本地验证靶机: 端到端测链/写马, 
 
 ## 支持文件
 - references/weaver-dispatch-lab-case.md — 泛微 dispatch 载荷验证案例(依赖清单/发现记录)
+- **验证「厂商自带白名单/序列化器」时, 直接编译厂商反编译源码进靶机, 别自己重写"等价类"** ——
+  被验证的防护逻辑必须与目标逐行一致, 否则验的是你写的类而不是目标的类。
+  这类场景(hessian + 自定义白名单)的完整靶机布局/复现命令/六组实测矩阵见
+  hessian-deserialization-audit → references/dahua-evowpms-hessian-lab.md

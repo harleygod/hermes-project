@@ -238,13 +238,13 @@
     "created_at": "2026-08-05T06:45:38.703007+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-08-25T02:16:03.456967+00:00",
-    "last_used_at": "2026-08-25T02:15:57.577990+00:00",
-    "last_viewed_at": "2026-08-25T02:15:57.560570+00:00",
+    "last_used_at": "2026-09-18T16:10:16.387533+00:00",
+    "last_viewed_at": "2026-09-18T16:10:16.358501+00:00",
     "patch_count": 20,
     "pinned": false,
     "state": "active",
-    "use_count": 38,
-    "view_count": 38
+    "use_count": 39,
+    "view_count": 39
   },
   "computer-use": {
     "archived_at": null,
@@ -263,14 +263,14 @@
     "archived_at": null,
     "created_at": "2026-08-23T07:39:21.843976+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-23T07:39:29.984025+00:00",
-    "last_used_at": "2026-09-13T06:01:53.857464+00:00",
-    "last_viewed_at": "2026-09-13T06:01:53.843958+00:00",
-    "patch_count": 1,
+    "last_patched_at": "2026-09-18T16:14:06.731505+00:00",
+    "last_used_at": "2026-09-18T16:13:56.867082+00:00",
+    "last_viewed_at": "2026-09-18T16:13:56.856070+00:00",
+    "patch_count": 3,
     "pinned": false,
     "state": "active",
-    "use_count": 6,
-    "view_count": 6
+    "use_count": 8,
+    "view_count": 8
   },
   "design-md": {
     "archived_at": null,
@@ -471,14 +471,14 @@
     "archived_at": null,
     "created_at": "2026-08-10T03:38:18.187539+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-09-18T02:28:17.751816+00:00",
-    "last_used_at": "2026-09-17T12:13:38.614766+00:00",
-    "last_viewed_at": "2026-09-17T12:13:38.607712+00:00",
-    "patch_count": 3,
+    "last_patched_at": "2026-09-18T16:04:18.756424+00:00",
+    "last_used_at": "2026-09-18T16:00:23.023585+00:00",
+    "last_viewed_at": "2026-09-18T16:00:22.990983+00:00",
+    "patch_count": 7,
     "pinned": false,
     "state": "stale",
-    "use_count": 2,
-    "view_count": 2
+    "use_count": 4,
+    "view_count": 4
   },
   "hermes-multi-model": {
     "archived_at": null,
@@ -497,14 +497,14 @@
     "archived_at": null,
     "created_at": "2026-09-13T05:45:38.793402+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-09-16T16:48:36.370760+00:00",
-    "last_used_at": "2026-09-16T16:47:11.921051+00:00",
-    "last_viewed_at": "2026-09-16T16:47:11.910537+00:00",
-    "patch_count": 15,
+    "last_patched_at": "2026-09-18T16:13:50.619874+00:00",
+    "last_used_at": "2026-09-19T16:31:08.458861+00:00",
+    "last_viewed_at": "2026-09-19T16:31:08.451330+00:00",
+    "patch_count": 19,
     "pinned": false,
     "state": "active",
-    "use_count": 5,
-    "view_count": 5
+    "use_count": 8,
+    "view_count": 8
   },
   "himalaya": {
     "archived_at": null,
@@ -810,13 +810,13 @@
     "created_at": "2026-07-28T09:00:06.399391+00:00",
     "created_by": null,
     "last_patched_at": "2026-07-28T09:17:19.627717+00:00",
-    "last_used_at": "2026-08-06T09:48:12.067326+00:00",
-    "last_viewed_at": "2026-08-06T09:48:12.049093+00:00",
+    "last_used_at": "2026-09-18T16:03:01.746836+00:00",
+    "last_viewed_at": "2026-09-18T16:03:01.716735+00:00",
     "patch_count": 9,
     "pinned": false,
     "state": "active",
-    "use_count": 13,
-    "view_count": 13
+    "use_count": 14,
+    "view_count": 14
   },
   "pentest-credential-cracking": {
     "archived_at": null,

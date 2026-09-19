@@ -41,6 +41,16 @@ public Class<?> load(String className) {
 - **`java.lang.Class` 放行 → `ClassDeserializer` 里 `Class.forName(name, false, loader)`**：`false` 不执行静态初始化器，故加载任意类不会触发静态块 RCE，只能当"类加载原语"喂给别的 gadget。
 - **deny 用 `Pattern.matches()` 全串匹配**：`java.lang.Runtime` 精确 deny，但 `java.lang.Runtime$1`、`java.lang.RuntimeXX` 等内部类/同前缀类**不**被 deny（落回 `java\..+` 放行）。
 - **`_staticTypeMap` 全表无危险类**（void/boolean/byte/short/int/long/float/double/char/string/date/原始数组 + `object`→JavaDeserializer(Object.class) + HessianRemote→RemoteDeserializer），静态表命中虽绕过 load() 但都无害，不能借此 RCE。
+- **★ 决定「哪些类真能被实例化」的是静态白名单 `java\..+`，与类实现了什么接口无关（本地靶机实测，本次曾误判）**：自定义白名单（如 `com.dahua.evo.*`）之外，静态白名单 `java\..+` 仍放行**全部 `java.*` 类**。同一靶机三组对照：
+  - `java.util.concurrent.SynchronousQueue`（`java.*`）→ **真实例化**，`readObject()` 返回 `SynchronousQueue`
+  - `audit.PlainBean`（非 `java.*`、非白名单）→ **降级**，返回 `java.util.HashMap{num=1, name=plain}`
+  - `com.sun.rowset.JdbcRowSetImpl`（`com.sun.*`，教科书 JNDI gadget）→ **降级**，返回 `java.util.HashMap`
+  ⚠️ **别把第 1 组误读成「Collection/Map 实现类走内置 deserializer 绕过白名单」**——本次实战正是据它推出「唯一缺口」并报给了用户，补做第 2/3 组对照后才定位真因是 `java\..+` 放行。两条实际含义：(a) 可实例化集合 = 白名单内厂商包 + `java.*` + `javax.management.*`；**`com.sun.*` 与第三方 gadget（JdbcRowSetImpl / TemplatesImpl / CB·CC·Spring 系列）全被降级，标准链打不通**；(b) 设计对照实验时**反证组必须选「既不在 `java.*` 也不在自定义白名单」的类**。
+- **`ClassDeserializer` 的 `_loader` 在真实部署里恒非 null**：字节码有两条分支 `Class.forName(name, false, _loader)`（`_loader!=null`）与 `Class.forName(name)`（`_loader==null`，initialize=true）。但 `new SerializerFactory()` = `this(Thread.currentThread().getContextClassLoader())` → **实际固走 `false` 分支，加载任意类都不触发静态块**（static 块探针靶机实测无命中）。别把 `_loader==null` 那条当可用路径耗时间。
+- **`Method` 字段路线实测判死（不再是「大概率」）**：`java.lang.reflect.Method` 不实现 `Serializable`，hessian **生成端即抛** `RuntimeException: Serialized class java.lang.reflect.Method must implement java.io.Serializable`（报错带字段名与宿主类）。攻击者连 payload 都构不出来 → `MethodJobHandler.execute()` 的 `method.invoke(target,param)` 无法经反序列化注入，不必再投入。
+- **白名单内类的 `Class` 字段确实可承载非白名单类名（实测成立，但无 RCE 收益）**：靶机反序列化 `EvoHolder{clazz=audit.ProbeStatic}` 成功，字段被赋成非白名单包内的类 → 证实「`getDeserializer(Class)` 不查白名单」这个结构性入口真实存在。因 `initialize=false` 它只等于**类加载原语**：价值在**类加载探测**（探目标 classpath 有哪些类）或喂给后续会 `newInstance()/getMethod().invoke()` 的业务代码，自身不触发静态块。
+
+靶机布局/复现命令/六组实测矩阵/未完成线索见 references/dahua-evowpms-hessian-lab.md
 
 完整机制（`_staticTypeMap` 全表、readObject 全标签→load() 映射、getDeserializer(String) 全流程）见 references/hessian-4.0.63-whitelist-mechanism.md
 
@@ -83,7 +93,7 @@ hessian 反序列化实际只触发这几个点，`TemplatesImpl`、`BadAttribut
 ## Pitfalls
 
 - **有源码时先判「无白名单变体」是不是死代码**：厂商常同时放多个序列化器（如 `HessianSerializer`(v2+自定义白名单) 与 `Hessian1Serializer`(v1，直接 `new HessianInput().readObject()`，**完全没有 `setSerializerFactory`**）。看到无白名单变体别立刻当成绕过点，**先 grep 它有没有被真正引用**：`grep -rn "Hessian1Serializer.class\|new Hessian1Serializer("`。实测大华：该类存在于两个模块的 client jar 里，但**全代码库 0 处引用**（`RpcProviderFactory.serializer = HessianSerializer.class` 是默认且唯一）→ 死代码，白名单结论不变。**引用计数为 0 就写清楚「不是绕过路径」，别拿它去构造 payload 浪费时间**。
-- **绕过候选要看「白名单内类的危险字段类型」**：白名单放行的厂商包（`com.厂商.*`）里声明为 `Class`/`Class<?>`/`Method`/`ProcessBuilder` 的字段是唯一结构性入口（配合 `getDeserializer(Class)` 不查白名单）。实测大华厂商包内此类字段 **120 处**（如 `DataType.serviceClazz`、`MethodJobHandler.initMethod/destroyMethod`）。但**必须再验一步**：hessian 能否实例化该类型的值——`Class` 有 `ClassDeserializer`（`Class.forName(..., false, loader)`，不触发静态块），`Method` 没有内置序列化器（大概率反序列化直接失败）。字段存在 ≠ 可利用，**判链路可行性仍按「每个类/类型逐个对照白名单 + 有无该类型的 Deserializer」**。
+- **绕过候选要看「白名单内类的危险字段类型」**：白名单放行的厂商包（`com.厂商.*`）里声明为 `Class`/`Class<?>`/`Method`/`ProcessBuilder` 的字段是唯一结构性入口（配合 `getDeserializer(Class)` 不查白名单）。实测大华厂商包内此类字段 **120 处**（如 `DataType.serviceClazz`、`MethodJobHandler.initMethod/destroyMethod`）。但**必须再验一步**：hessian 能否实例化该类型的值——`Class` 有 `ClassDeserializer`（`Class.forName(..., false, loader)`，不触发静态块），`Method` **攻击者生成端就构造不出**（`java.lang.reflect.Method` 非 `Serializable`，hessian 生成端直接抛 RuntimeException，见上文绕过点实测）。字段存在 ≠ 可利用，**判链路可行性仍按「每个类/类型逐个对照白名单 + 有无该类型的 Deserializer」**。
 - hessian 不走 readObject，Java 原生链全失效——别套用 ysoserial/原生链思路
 - 白名单外类静默替换成 HashMap（不报错），先确认 gadget 类在白名单再构造 payload
 - 黑名单只有 4 个类（Runtime/Process/System/Thread），java.* 里其他危险类都没拦
@@ -91,3 +101,6 @@ hessian 反序列化实际只触发这几个点，`TemplatesImpl`、`BadAttribut
 - 类型标签：'C'(67)对象 'M'(77)Map 'U'(85)列表 'V'(86)定长列表，Map/List 的 type 也走 loadSerializedClass 白名单，不绕过
 - **厂商白名单内（com.xxx.*）的命令执行类本身不是 gadget**：如 `ShellUtil extends Thread`，`run()`→`Runtime.exec`。但 run() 需 `start()`、exec() 需显式调用，hessian 反序列化都不触发（无参构造缺失时 Unsafe 实例化，字段写了但方法不跑）。必须找触发点（readResolve/hashCode/equals/compareTo/构造器，**不含 setter**）上**调用它**的载体——审计这类类时重点扫它的调用方是否落在触发点方法里，而不是看它自身有没有 Runtime.exec
 - **判断「这条链是不是真的堵死」要给结论而不是留悬念**：用户会直接问「到底能不能通，是不是依赖包版本的问题」。回答格式应是「哪条路径、被什么机制拦住、证据在哪（源码/字节码行号）、还有哪几条窄路值得试、试它们需要什么前置条件」——别用「大概率/可能」含糊过去，也别为了有交代就把死代码变体说成可用绕过
+- **`deserialize(bytes, clazz)` 的 `clazz` 参数是摆设**：`HessianSerializer.deserialize(byte[], Class)` 内部只调 `hi.readObject()`，**完全没使用 clazz**，类型强转（`(RpcRequest) obj`）在调用方。所以 payload 不必是目标期望的类型——**任意对象图都会被完整反序列化，后续 ClassCastException 不影响已发生的副作用**。构造验证 payload 时不用为「类型要对上」费心。
+- **涉及「机制是否被绕过」的结论必须先跑正反对照实验，不能用单组结果外推**：本次曾据「SynchronousQueue 未被拦截」推出「内置 deserializer 绕过白名单」并作为唯一缺口报给用户，靶机补做 `PlainBean`/`JdbcRowSetImpl`（既非 `java.*` 也非厂商白名单）对照后才定位真因是静态白名单 `java\..+`。**只有「通过」组、没有「拒绝」组的实验结论不可采信**；给用户的绕过类结论必须同时给出被挡住的反证组及其返回（HashMap）。
+- **靶机验证时用 `-Dprobe.tag=GEN|LAB` 区分「构包端」与「目标端」的静态块副作用**：探测类 static 块里读 `System.getProperty("probe.tag")` 写标记文件，否则用 `Class.forName` 构包时本地触发的副作用会与靶机触发混淆，得出「static 块能触发」的假阳性。同理判「是否触发 static 块」**必须用 static 块探针实测**，别只看 `forName` 的 boolean 参数推断。
