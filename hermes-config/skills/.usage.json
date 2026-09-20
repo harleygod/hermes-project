@@ -237,14 +237,14 @@
     "archived_at": null,
     "created_at": "2026-08-05T06:45:38.703007+00:00",
     "created_by": "agent",
-    "last_patched_at": "2026-08-25T02:16:03.456967+00:00",
-    "last_used_at": "2026-09-18T16:10:16.387533+00:00",
-    "last_viewed_at": "2026-09-18T16:10:16.358501+00:00",
-    "patch_count": 20,
+    "last_patched_at": "2026-09-20T14:48:22.205565+00:00",
+    "last_used_at": "2026-09-20T14:48:07.840391+00:00",
+    "last_viewed_at": "2026-09-20T14:48:07.826924+00:00",
+    "patch_count": 34,
     "pinned": false,
     "state": "active",
-    "use_count": 39,
-    "view_count": 39
+    "use_count": 45,
+    "view_count": 45
   },
   "computer-use": {
     "archived_at": null,
@@ -472,13 +472,13 @@
     "created_at": "2026-08-10T03:38:18.187539+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-09-18T16:04:18.756424+00:00",
-    "last_used_at": "2026-09-18T16:00:23.023585+00:00",
-    "last_viewed_at": "2026-09-18T16:00:22.990983+00:00",
+    "last_used_at": "2026-09-20T14:46:04.025075+00:00",
+    "last_viewed_at": "2026-09-20T14:46:04.000480+00:00",
     "patch_count": 7,
     "pinned": false,
     "state": "stale",
-    "use_count": 4,
-    "view_count": 4
+    "use_count": 5,
+    "view_count": 5
   },
   "hermes-multi-model": {
     "archived_at": null,
@@ -498,13 +498,13 @@
     "created_at": "2026-09-13T05:45:38.793402+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-09-18T16:13:50.619874+00:00",
-    "last_used_at": "2026-09-19T16:31:08.458861+00:00",
-    "last_viewed_at": "2026-09-19T16:31:08.451330+00:00",
+    "last_used_at": "2026-09-20T14:43:18.858337+00:00",
+    "last_viewed_at": "2026-09-20T14:43:18.840801+00:00",
     "patch_count": 19,
     "pinned": false,
     "state": "active",
-    "use_count": 8,
-    "view_count": 8
+    "use_count": 12,
+    "view_count": 12
   },
   "himalaya": {
     "archived_at": null,
@@ -1161,13 +1161,13 @@
     "created_at": "2026-08-05T08:02:57.978301+00:00",
     "created_by": "agent",
     "last_patched_at": "2026-08-23T08:27:48.045403+00:00",
-    "last_used_at": "2026-09-13T05:59:15.062727+00:00",
-    "last_viewed_at": "2026-09-13T05:59:15.044337+00:00",
+    "last_used_at": "2026-09-20T14:33:16.241785+00:00",
+    "last_viewed_at": "2026-09-20T14:33:16.228042+00:00",
     "patch_count": 56,
     "pinned": false,
     "state": "active",
-    "use_count": 57,
-    "view_count": 57
+    "use_count": 58,
+    "view_count": 58
   },
   "vuln-intel-research": {
     "archived_at": null,
