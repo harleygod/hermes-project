@@ -1,7 +1,7 @@
 ---
 name: hermes-messaging-platforms
 description: "接微信/QQ/Telegram 等到 Hermes gateway：QR 扫码登录、凭证配置、排障。"
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Hermes 消息平台接入 (Messaging Platforms)
@@ -12,6 +12,8 @@ version: 1.0.0
 - 用户问"能不能接微信/QQ/Telegram 聊天"
 - 配置 gateway 平台凭证、扫码登录、平台收发不工作排障
 - 平台 token 过期需要重新扫码
+- 用户问"微信/QQ 接得怎么样、好不好用、现在通不通" → **先跑 `scripts/weixin_channel_check.py` 自检再答**，
+  答法：能用的部分 + 实测踩过的坑（各带日志特征）+ 当前通道状态 + 需要用户做的那一步（在微信发一句话）
 
 ## 平台清单
 适配器在 `hermes-agent/gateway/platforms/`（Windows 上 HERMES_HOME 通常为 C:\Users\user\AppData\Local\hermes）：
@@ -122,6 +124,28 @@ cat gateway.pid   # {"pid":...,"start_time":...}；powershell Get-Process -Id <p
 
 预防：gateway 别长跑，或者 `hermes gateway install` 装计划任务（顺带解决"关终端就断"）。
 
+### 5. 日志既无 getaddrinfo 也无 Session expired，但微信端就是不回 = agent 卡在 provider 流式（2026-09-20 实测）
+症状：gateway 在跑、日志有 inbound、没有报错刷屏，用户在微信里等到天荒地老也没回复。日志特征：
+```
+ERROR gateway.run: Agent idle for 1s (timeout 1800s) in session agent:main:weixin:dm:<id> | last_activity=waiting for provider response (streaming) | iteration=3/500 | tool=none
+INFO  gateway.run: response ready: platform=weixin chat=<id> time=63887.6s api_calls=3 response=361 chars
+INFO  gateway.run: Transient agent failure in session <sid> — persisting user message so conversation context is preserved on retry.
+```
+**判据是 `time=` 和 `last_activity=waiting for provider response (streaming)`**：`time=63887.6s`（≈17.7 小时）就是这条 turn 被卡住的真实时长；
+`Agent idle for 1s (timeout 1800s)` 里的 "1s" 是误导值，别拿它判断。根因不是微信，是模型流式响应 hang 死占住了该会话，
+期间用户再发多少条都不会有回应（微信端表现 = "它不理我"）。
+处理：重启 gateway 释放该 session（用户消息已持久化，重启后重发可保住上下文），再让用户在微信发一句话重新激活会话窗口。
+
+**微信端"没反应"五种病因判别口诀（全靠日志，别猜）**：
+
+| 日志特征 | 病因 | 处理 |
+|---|---|---|
+| 无 gateway 进程 / status 报 not running（含 Stale gateway_state.json） | 进程没跑 | `hermes gateway run` |
+| `poll error ... getaddrinfo failed` 反复刷 | 进程 resolver 坏 | 重启 gateway（凭证不用动） |
+| `✓ weixin connected` 之后 `Session expired` | token 死 | 重扫码 |
+| `Agent idle ... waiting for provider response` + `time=` 几万秒 | agent/provider 卡死占会话 | 重启 gateway 释放 |
+| gateway 活着、日志干净、就是发不出去 | bot 不能主动发起会话 | 只能等用户先说话 |
+
 ## 凭证有效性验证（token 失效排查）——`getconfig ret:0` **不足以**判定可用
 调 iLink `ilink/bot/getconfig`（POST，headers: `AuthorizationType: ilink_bot_token` + `Authorization: Bearer <token>`，body: `{"ilink_user_id": <user_id>}`），返回 `ret: 0` 即 token 有效（响应含 typing_ticket）。
 
@@ -156,6 +180,23 @@ gateway.run: ✓ weixin connected
 - **凭证无法手填伪造**：WEIXIN_TOKEN/ACCOUNT_ID 只能来自 QR 登录流程（web_server.py 注释原文 "obtained through QR login in hermes gateway setup"）
 - **iLink 有反滥用限制**：bot_type=3 是个人号；扫码用用户自己的微信，注意确认页面是腾讯官方 liteapp.weixin.qq.com 域
 - 平台接入后消息经 gateway 路由，工具权限与 CLI 会话一致；私聊/群策略用 WEIXIN_DM_POLICY / WEIXIN_GROUP_POLICY / WEIXIN_ALLOWED_USERS 控制
+- **重启 gateway 会补投上一个会话遗留的后台委托/通知，看起来像"用户发了消息"（2026-09-20 实测）**：日志出现
+  `Watch pattern notification — injecting for weixin chat=<id>` 紧接
+  `inbound message: platform=weixin ... msg='[ASYNC DELEGATION BATCH COMPLETE — deleg_xxx] ...'`。
+  这不是用户在微信里打的字，但会占用该会话并触发一轮 agent（可能白烧 API）。排查历史问题/判断"用户是否真活着"时别把它当用户消息。
+- **重启后出现 `weixin: restored N context token(s) for <account>` = 会话上下文已恢复**，不用重扫码，属健康信号。
+- `hermes gateway status` 报的 PID（如 18316）是 gateway 子进程，与 `terminal(background=true)` 拉起的 wrapper pid 不同，
+  两者不一致是正常的，别当异常去 kill。
+- 自检通道时**不要连发试外发**：失败会把本地熔断打开；实测等 40s 再试仍是同一个
+  `rate limited; cooldown active for 30.0s`（`30.0s` 是本地熔断刚打开的值，不是服务端让人等 30s）。一次试完就停手，改走"让用户先说话"。
+- 回答用户"微信好不好用"这类评估时，直接给**能用的部分 + 实测踩过的坑（各带日志特征）+ 当前通道状态 + 需要用户做的那一步**；
+  不要复述配置步骤，也不要拿 getconfig ret:0 当"通道正常"的结论（唯一证据是 inbound）。
+- **微信端回复要短，长结构化消息用户可能看不到（2026-09-20 实测，用户原话"我咋看不到你的结果呢"）**：
+  一条塞满多张表格 + 长代码块 + 多层小标题的汇报，在微信里可能整条收不到/看不到，用户以为你没回复。
+  发法：先给 **3-6 行结论**（结论 + 关键证据 + 下一步），把详细内容**落盘成文件**再给路径，
+  必须展示的长内容**拆成多条**发；单条尽量控制在 ~1500 字符内。渗透/审计类长报告尤其注意这一点。
 
 ## 脚本
 - `scripts/weixin_qr_login.py` — 微信 iLink QR 登录（取码→PNG 弹屏→轮询状态→打印凭证），复制即用
+- `scripts/weixin_channel_check.py` — 通道只读自检（打码读 .env 凭证 → 新进程测 DNS/TLS → getconfig 验 token → 打印判据提醒）。
+  回答"微信通道现在通不通/好不好用"时**先跑这个**，再决定要不要重启或重扫码；它不改任何配置、不发消息。

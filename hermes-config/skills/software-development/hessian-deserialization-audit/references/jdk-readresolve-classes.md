@@ -37,7 +37,7 @@ javax.swing.Timer
 - **java.net.URL**：readResolve 重建 URL（用 protocol 找 handler）；`HashMap.put` 触发 `URL.hashCode → DNS`（DNS 外带验证，非 RCE）
 - **java.net.InetAddress**：readResolve 可能触发 DNS（类似 URL）
 - **java.lang.invoke.MethodType**：readResolve 是 private，反序列化方法类型，可能触发类加载
-- **java.lang.invoke.SerializedLambda**：本身没 readResolve（grep 命中是常量池字符串），字段 implClass/implMethodName/capturedArgs，反序列化后需后续调用才触发方法解析
+- **java.lang.invoke.SerializedLambda**：**有 readResolve**（JDK8u281 `javap -p` 实测：`private java.lang.Object readResolve() throws ReflectiveOperationException`）。旧结论"没 readResolve"错误，错因是 javap 未加 `-p`（private 方法不显示）+ 只 grep 常量池。readResolve 会对 `capturingClass` 做 `getDeclaredMethod("$deserializeLambda$", SerializedLambda.class)` + invoke → 理论上是"任意类静态方法反射调用原语"，但需目标 classpath 上真存在 `$deserializeLambda$` 方法（javac 为可序列化 lambda 生成）；大华 43324 java 里命中 0，故无落点
 - **javax.management.openmbean.*** / ImmutableDescriptor**：JMX 只读对象，readResolve 返回单例，无危险操作
 - 其余（java.time.*、java.awt.*、Locale/Currency/Level 等）：readResolve 返回单例/重建对象，无 RCE
 

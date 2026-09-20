@@ -94,6 +94,22 @@ NettyHttpServerHandler.process()                        // NettyHttpServerHandle
    `shellPath = deployPath + File.separator + manageScript + " {0} {1} {2}"` → agent 执行）同族但更底层。
 2. **白名单内 gadget 挖掘**：可实例化集合 = 厂商包 + `java.*` + `javax.management.*`；
    在这三个范围内找 4 个触发点（readResolve/hashCode/equals/compareTo/构造器，**不含 setter**）上的危险调用载体。
+   → **2026-09-20 已系统性排除，见 `D:\Pentest\大华代码审计_20260916\15_反序列化链结论_20260920.md`**：
+   (a) 43324 个反编译 java 的 7412 个触发点方法中 6744 个是 Lombok 样板，余 668 个自定义触发点精确 sink 命中 **0**；
+   (b) 危险字段 119 处（Class/Method/ClassLoader/URL/ScriptEngine/GroovyClassLoader/BeanFactory），第三方 gadget 包字段仅 **1** 处；
+   "危险字段 ∩ 自定义触发点" 只有 1 个类且是 static 工具类（hessian 不调 static）；
+   (c) 目标 739 jar/57079 class 里含 readResolve 的仅 **17** 个（全单例/枚举 + javassist SerializedProxy）→
+   **在"4 个触发点"这个口径下无危险类可用**。
+   ⚠️ **纠错（2026-09-20 当天更正）**：曾据"739 jar 的包统计"下结论说"classpath 上没有 CC/CB/c3p0/fastjson/xstream/groovy"，
+   **这是错的**——厂商代码包**只含业务 jar + 少量库，不含运行依赖**（连 Spring 核心/Tomcat/MyBatis/hessian 本体都没有），
+   数 jar 数不出真实 classpath。**正确办法：扫源码 import 反推**（大华实测：fastjson import **9802** 处、commons-collections 3.x+4.x、
+   commons-beanutils、xstream、groovy、javassist 3.23.1-GA、json-lib、snakeyaml 1.23 **都在**）+ **jar 内
+   `META-INF/maven/*/pom.properties` 反推版本**（大华实测拿到 javassist 3.23.1-GA / snakeyaml 1.23 / commons-lang3 3.3.2·3.5 /
+   hutool 4.6.17 / gson 2.8.5 / log4j 1.2.17 / jsoniter 0.9.23 / rasp-engine 1.3.7 等）。
+   **gadget 库存在 ≠ hessian 链成立**——公开链靠原生 readObject/setter，hessian 那 4 个触发点照样喂不动；
+   但这些库的存在**让「原生 OIS 入口 / fastjson / xstream / snakeyaml」变成了更值得打的方向**（大华 fastjson 调用 9802 处、
+   5 处原生 ObjectInputStream，snakeyaml 1.23 属 `Yaml.load` gadget 影响范围）。
+   (d) 附加：classpath 上有 **OpenRASP(com.baidu.openrasp) + 悬镜(com.fuxi.javaagent)** 双 RASP，exec 会被 hook。
 3. **未深挖的兄弟入口**：`evo-runs-adapt/AuthFilter` 保护 `/1.0.0/receive`（与已知 0day 同族接口、另一套服务），仅定位未展开。
 4. **非 hessian 的 5 处 `ObjectInputStream`**：`ListUtils`×2、`BeanUtil.cloneObj`、
    `UniqueLinkedBlockingQueue`、`CronExpression` — 需逐个追调用方可达性（走 Java 原生链，不受 hessian 白名单约束）。

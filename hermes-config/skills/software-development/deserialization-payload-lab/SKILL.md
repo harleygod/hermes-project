@@ -34,6 +34,13 @@ description: "Java反序列化载荷本地验证靶机: 端到端测链/写马, 
 补做反证组后才定位真因是库的**静态白名单按包名放行**(`java\..+` 放行全部 `java.*`) —— 与"绕过了什么机制"完全无关。
 选择反证组时注意**排除掉会被静态规则放行的包名**, 否则反证组自己也会"通过", 反而强化误判。
 
+**还要加一组「字段声明类型」正证(canary)**: 白名单/类过滤可能只拦**顶层类名**,
+而反序列化器给**字段**选实现时用的是字段的**声明类型**(hessian 的 `getDeserializer(Class)` 重载即不查白名单)。
+做法: 做一个白名单内的容器类, 其字段**声明类型**写成非白名单类, 反序列化后检查该字段是否被**真实例化**
+(实测 hessian: 字段值真被实例化, 连 `readResolve` 都触发)。**只测顶层载荷会漏掉整条通道**;
+同理「按接口/集合类判断能不能绕过」是错的 —— 决定因素是**字段的声明类型**。案例矩阵见
+hessian-deserialization-audit → references/hessian-field-declared-type-bypass.md
+
 **构包端副作用与目标端副作用必须可区分**: 载荷里若含会触发静态块/联网的类,
 构建 payload 的那个 JVM 会先触发一次, 导致「靶机没打中也看到副作用」的假阳性。
 做法: 探测类 static 块读 `-Dprobe.tag=GEN|LAB` 并把它写进标记文件, 构包用 `-Dprobe.tag=GEN`、
@@ -46,10 +53,21 @@ DNS 出网、写马落盘), 不能只看参数/字节码推断。
 - **ClassFormatError "Extra bytes at the end of class file"**: class 文件从序列化流抠出时带尾随字节(流残留如 `75 71 00 7e...`)。从流中重新提取干净字节: 定位 `cafebabe`, 前 4 字节大端 = 数组长度, 取 [p, p+len]。TemplatesImpl `defineTransletClasses` 报 "Cannot compile translet class" = defineClass 返回 null = 字节码不干净
 - **maven 坐标**: commons-collections 3.x groupId = `commons-collections`(`commons-collections:commons-collections:3.2.1`); `org.apache.commons:commons-collections4` 才是 4.x。阿里云 maven 镜像缺部分 artifact(404), 用 repo1.maven.org 走代理
 - **链触发判定**: HTTP 500 + RuntimeException 即确认链触发(beanutils 吞真实异常属正常), 不必纠结报错内容; 写马落盘才是最终证据
+- **搭靶机前先判「是不是死代码」**: `grep -rn "new XxxSerializer(\|XxxSerializer.class"` —— 引用计数 0 = 该序列化器/执行器从未被装配,
+  为它搭靶机纯属浪费(实测大华 `FastJsonRedisSerializer` / `Hessian1Serializer` / `GlueFactory` 三例全 0 引用)。
+  同理, **靶机跑通 ≠ 目标可利用**: 还要写清利用前提(如"能往该 Redis 写 pub/sub 消息")与运行时拦截
+  (响应头 `X-Protected-By: OpenRASP` = 目标装了 RASP, 会 hook 原生反序列化与 exec, 先给可行性打折)
+- **靶机保真度 = 依赖集合必须对**: 厂商给的"代码包"通常**不含运行依赖**(实测大华 739 jar 里连 Spring 核心/Tomcat/MyBatis/hessian 本体都没有),
+  照它搭出来的 classpath 是错的。拿真实依赖清单两条路: ① 扫源码 `import` 反推(判断**有没有**这个库) ② 读 jar 内
+  `META-INF/maven/*/pom.properties`(拿**精确版本**)。缺的构件从公开镜像取即可, 不必回目标端拉:
+  `mvn dependency:get -Dartifact=g:a:v -DremoteRepositories=https://maven.aliyun.com/repository/public`
 - JDK8 internal API(TemplatesImpl/TransformerFactoryImpl)javac 警告可忽略; 反编译内部类用 `javap -c -p -cp rt.jar`
 
 ## 支持文件
 - references/weaver-dispatch-lab-case.md — 泛微 dispatch 载荷验证案例(依赖清单/发现记录)
+- references/java-deser-sink-patterns.md — **搭靶机的前半程**: 按引擎(ObjectInputStream / MessageListenerAdapter /
+  Jackson defaultTyping / fastjson / snakeyaml / XStream)**从源码里挖反序列化 sink** 的 grep 模式表,
+  外加判定三问(有没有被装配=防死代码 / 能不能到达 / 有没有 RASP 拦截)与结论写法示范
 - **验证「厂商自带白名单/序列化器」时, 直接编译厂商反编译源码进靶机, 别自己重写"等价类"** ——
   被验证的防护逻辑必须与目标逐行一致, 否则验的是你写的类而不是目标的类。
   这类场景(hessian + 自定义白名单)的完整靶机布局/复现命令/六组实测矩阵见

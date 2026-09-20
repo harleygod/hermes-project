@@ -49,6 +49,14 @@ public Class<?> load(String className) {
 - **`ClassDeserializer` 的 `_loader` 在真实部署里恒非 null**：字节码有两条分支 `Class.forName(name, false, _loader)`（`_loader!=null`）与 `Class.forName(name)`（`_loader==null`，initialize=true）。但 `new SerializerFactory()` = `this(Thread.currentThread().getContextClassLoader())` → **实际固走 `false` 分支，加载任意类都不触发静态块**（static 块探针靶机实测无命中）。别把 `_loader==null` 那条当可用路径耗时间。
 - **`Method` 字段路线实测判死（不再是「大概率」）**：`java.lang.reflect.Method` 不实现 `Serializable`，hessian **生成端即抛** `RuntimeException: Serialized class java.lang.reflect.Method must implement java.io.Serializable`（报错带字段名与宿主类）。攻击者连 payload 都构不出来 → `MethodJobHandler.execute()` 的 `method.invoke(target,param)` 无法经反序列化注入，不必再投入。
 - **白名单内类的 `Class` 字段确实可承载非白名单类名（实测成立，但无 RCE 收益）**：靶机反序列化 `EvoHolder{clazz=audit.ProbeStatic}` 成功，字段被赋成非白名单包内的类 → 证实「`getDeserializer(Class)` 不查白名单」这个结构性入口真实存在。因 `initialize=false` 它只等于**类加载原语**：价值在**类加载探测**（探目标 classpath 有哪些类）或喂给后续会 `newInstance()/getMethod().invoke()` 的业务代码，自身不触发静态块。
+- **★ 该绕过的真正确认形态：「字段声明类型」通道（第二轮靶机实测成立，比 `Class` 字段强得多）**：白名单只按**类名**拦顶层类型，但 hessian 给**字段**选反序列化器时走 `getDeserializer(字段的声明类型)`，**不查白名单**。实测（`hessian_lab2`，15 组）：
+  - `EvoHolderBean{ b: NotAllowedBean }`（厂商白名单类的字段，声明类型 = 非白名单 bean）→ 反序列化后 `field b -> audit.NotAllowedBean val=NotAllowedBean(cmd=whoami,num=1)`：**字段值被真实例化，且 `readResolve` 被调用**（探针打出 `[SIDE-EFFECT] NotAllowedBean.readResolve`）
+  - `EvoHolderMap{ m: NotAllowedMapResolve }` / `EvoHolderList{ l: NotAllowedList }` → 非白名单 Map/List 实现类型同样被**真实例化**
+  → 结论：**绕过取决于「字段的声明类型」，与类实现了什么接口无关**（此前「Collection 实现类走内置 deserializer」的解释是错的，那条实为静态白名单 `java\..+` 放行，见上文）。
+  → 因此审计动作是**枚举厂商白名单类的非白名单字段类型**，而不是枚举集合类。实测某产品 43,324 个 .java 里这类字段类型 **408 种**，TOP：`org.springframework.context.ApplicationContext` 564 处、`com.alibaba.fastjson.JSONObject` 509、`org.springframework.amqp.rabbit.core.RabbitAdmin` 199、`org.springframework.data.redis.core.RedisTemplate` 134、`org.springframework.http.HttpHeaders` 119。**枚举时必须按 import 解析简单名**（反编译代码用简单类名；不解析会得到 0 结果的假阴性）。
+  → 升级为 RCE 还需这些类型里存在「实例化 / readResolve 即做危险事」的 gadget；厂商包与 `java.*` 之外的第三方类型（spring/fastjson 等）若 classpath 版本合适就是这条路的出口。
+  完整 15 组矩阵 + 枚举脚本要点 + 复现命令见 references/hessian-field-declared-type-bypass.md
+- **JDK 集合的 compareTo/hashCode 是「读侧真实触发」的可用通道（实测确认）**：`control_priorityqueue_compareto` → 反序列化返回 `PriorityQueue [EvoComparable(1), EvoComparable(5)]` 且**服务端**打出 `[SIDE-EFFECT] EvoComparable.compareTo`；`TreeMap` 同理。元素类型可用**白名单内的厂商类**，所以这是「白名单内 Comparable/Comparator 里若调用了可控对象的危险方法」就能成链的入口——审计时别只扫触发点方法本身，要扫厂商 Comparable 的 `compareTo`。
 
 靶机布局/复现命令/六组实测矩阵/未完成线索见 references/dahua-evowpms-hessian-lab.md
 
@@ -90,14 +98,31 @@ hessian 反序列化实际只触发这几个点，`TemplatesImpl`、`BadAttribut
 - 本地测链：hessian jar + JDK 写 Java，`Hessian2Output.writeObject` → `Hessian2Input.readObject`
 - 反编译关键类：ClassFactory、SerializerFactory（getDeserializer/loadSerializedClass/_staticTypeMap）、JavaDeserializer（getReadResolve）、MapDeserializer（readMap）、Hessian2Input（readObject 类型标签 switch）
 
+## 判定「链能不能通」的五步框架（按序做，任一步为 0 即链不成立）
+
+1. **触发面**：hessian 只有 4 个触发点（readResolve / hashCode / equals / compareTo·compare）。原生 `readObject` 链、setter 链、构造器副作用**全部无效**（JDK8 下 Unsafe 免构造器）。先看候选 gadget 靠什么触发——靠 readObject/setter 的直接划掉（**公开 gadget 99% 死在这一步**）
+2. **白名单内类的触发点**：对自定义 allow 包 + `java.*` + `javax.management.*` 的所有类，取触发点方法体 grep 精确 sink。**跨类调用必须展开**（只做同类 1-hop 会漏 `ShellUtils.exec()` 这种跨类 sink；但要注意展开后的调用目标大多是 getter → 说明还是 Lombok 样板）。产出 0 时基本可定论
+3. **字段类型通道**（唯一能实例化白名单外类的路）：`ObjectFieldDeserializer.deserialize()` = `in.readObject(field.getType())` → 类型不匹配 fallback `getDeserializer(cl)`，**该路径不查白名单**。靶机实测：白名单载体的字段类型=非白名单类 → **真实例化且 readResolve 被调用**；同一类的**顶层**对象则被降级成 HashMap。→ 所以「白名单类有没有声明危险类的字段」是能否实例化的唯一判据
+4. **目标 classpath 上有没有 gadget 类**：把部署包 jar 全解出来，遍历 57079 个 class 的常量池找 `readResolve` / 危险字符串（Python zipfile + `b'xxx' in data`，1-2 分钟；比 xargs javap 快一个数量级，用于 triage 后再 javap -p -c 精查）。**classpath 上没有 gadget 类 = 链不可能存在**（大华实测无 CC/CB/c3p0/fastjson/xstream/groovy）
+5. **运行时拦截**：先看 classpath 有没有 RASP（`com.baidu.openrasp`、`com.fuxi.javaagent`、`com.xx.rasp`）——有则 `Runtime.exec`/原生反序列化会被 hook，可用性再打折
+
+**误报三件套（一定先滤掉再报结论）**：
+1. Lombok 样板 equals/hashCode（特征 `result = result * 59 +`、`$x = this.getX()`、调用目标全是 getXxx/getClass）
+2. 类名/方法名撞 sink 词（`DataSourceDTO` 命中 `DataSource`、业务 `getMethod()` getter 命中反射 `getMethod`）
+3. 工具类的 static 方法（hessian 反序列化**从不调用 static 方法**。如 `DateUtil.compareDate*` 方法体外的 `Runtime.exec` 与链无关——triage 会因方法名含 compare 命中，必须 javap 确认 sink 落在哪个方法）
+
+**判链铁律**：字段类型通道存在 ≠ 可利用。必须「字段类型 = 危险类」**且**「该类在它自己的触发点方法上有危险操作」两条同时成立，缺一不可。
+
 ## Pitfalls
 
+- **判断目标 classpath 上「有哪些库」时，绝不能只数部署包里的 jar（本 Skill 犯过这个错）**：厂商给的"代码包"常常**不含运行依赖**——大华 739 jar 里连 Spring 核心 / Tomcat / MyBatis / hessian 本体都没有，照它统计会得出"classpath 上没有 CC/CB/fastjson/xstream/groovy"的**错误结论**（实际这些库都在，fastjson 的 import 有 9802 处）。正确姿势两条：① **扫源码 import 反推**（43324 个 java 的 import 一遍过，能直接列出真实用到的第三方库）② **读 jar 内 `META-INF/maven/*/pom.properties` 拿准确版本**（大华实测拿到 javassist 3.23.1-GA / snakeyaml 1.23 / commons-lang3 3.3.2·3.5 / hutool 4.6.17 / gson 2.8.5 / log4j 1.2.17 / jsoniter 0.9.23）。**结论上的分寸**：gadget 库存在 ≠ hessian 链成立（公开链靠原生 readObject/setter，hessian 那 4 个触发点照样喂不动），但它直接决定「原生 OIS 入口 / fastjson / xstream / snakeyaml」这些**别的反序列化面**值不值得打——别因为 hessian 打不通就顺手把整个反序列化方向判死。
 - **有源码时先判「无白名单变体」是不是死代码**：厂商常同时放多个序列化器（如 `HessianSerializer`(v2+自定义白名单) 与 `Hessian1Serializer`(v1，直接 `new HessianInput().readObject()`，**完全没有 `setSerializerFactory`**）。看到无白名单变体别立刻当成绕过点，**先 grep 它有没有被真正引用**：`grep -rn "Hessian1Serializer.class\|new Hessian1Serializer("`。实测大华：该类存在于两个模块的 client jar 里，但**全代码库 0 处引用**（`RpcProviderFactory.serializer = HessianSerializer.class` 是默认且唯一）→ 死代码，白名单结论不变。**引用计数为 0 就写清楚「不是绕过路径」，别拿它去构造 payload 浪费时间**。
 - **绕过候选要看「白名单内类的危险字段类型」**：白名单放行的厂商包（`com.厂商.*`）里声明为 `Class`/`Class<?>`/`Method`/`ProcessBuilder` 的字段是唯一结构性入口（配合 `getDeserializer(Class)` 不查白名单）。实测大华厂商包内此类字段 **120 处**（如 `DataType.serviceClazz`、`MethodJobHandler.initMethod/destroyMethod`）。但**必须再验一步**：hessian 能否实例化该类型的值——`Class` 有 `ClassDeserializer`（`Class.forName(..., false, loader)`，不触发静态块），`Method` **攻击者生成端就构造不出**（`java.lang.reflect.Method` 非 `Serializable`，hessian 生成端直接抛 RuntimeException，见上文绕过点实测）。字段存在 ≠ 可利用，**判链路可行性仍按「每个类/类型逐个对照白名单 + 有无该类型的 Deserializer」**。
 - hessian 不走 readObject，Java 原生链全失效——别套用 ysoserial/原生链思路
 - 白名单外类静默替换成 HashMap（不报错），先确认 gadget 类在白名单再构造 payload
 - 黑名单只有 4 个类（Runtime/Process/System/Thread），java.* 里其他危险类都没拦
-- SerializedLambda 本身没 readResolve（grep 命中是常量池字符串），MethodType 才有 readResolve
+- **SerializedLambda 其实有 readResolve**：`javap -p` 可见 `private java.lang.Object readResolve()`（本轮 JDK8u281 rt.jar 实测）。早前"本身没 readResolve、grep 命中的是常量池字符串"的结论**是错的**——错因是 javap 不加 `-p` 看不到 private 方法，只 grep 常量池会漏。它在 `java.lang.invoke` 包内 → 静态白名单 `java\..+` 放行，故 hessian 能实例化并调其 readResolve。但该 readResolve 走 `capturingClass` 的 `$deserializeLambda$` 反射查找，需要一个真实存在该方法的类（javac 为"可序列化 lambda"生成），大华 43324 java 里 `deserializeLambda` 命中 **0**，故无落点；MethodType 也有 readResolve（重建方法类型，无危险）
+- **javassist `SerializedProxy`**（readResolve → `loadClass(proxyClassName)` + ProxyFactory）：类加载原语，但类在非白名单包，且要求某个白名单类以它为**字段类型**才可实例化（见下"字段类型通道"），实测无落点
 - 类型标签：'C'(67)对象 'M'(77)Map 'U'(85)列表 'V'(86)定长列表，Map/List 的 type 也走 loadSerializedClass 白名单，不绕过
 - **厂商白名单内（com.xxx.*）的命令执行类本身不是 gadget**：如 `ShellUtil extends Thread`，`run()`→`Runtime.exec`。但 run() 需 `start()`、exec() 需显式调用，hessian 反序列化都不触发（无参构造缺失时 Unsafe 实例化，字段写了但方法不跑）。必须找触发点（readResolve/hashCode/equals/compareTo/构造器，**不含 setter**）上**调用它**的载体——审计这类类时重点扫它的调用方是否落在触发点方法里，而不是看它自身有没有 Runtime.exec
 - **判断「这条链是不是真的堵死」要给结论而不是留悬念**：用户会直接问「到底能不能通，是不是依赖包版本的问题」。回答格式应是「哪条路径、被什么机制拦住、证据在哪（源码/字节码行号）、还有哪几条窄路值得试、试它们需要什么前置条件」——别用「大概率/可能」含糊过去，也别为了有交代就把死代码变体说成可用绕过
